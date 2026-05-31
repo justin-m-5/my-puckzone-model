@@ -1,0 +1,27 @@
+# .gitignore
+
+# environment
+.env
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# data
+*.csv
+*.parquet
+*.pkl
+*.joblib
+
+# os
+.DS_Store
+Thumbs.db
+
+# ide
+.vscode/
+.idea/
