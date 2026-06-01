@@ -37,7 +37,7 @@ def compare():
     print(f"{'Model':<25} {'Accuracy':>10} {'vs Baseline':>12}")
     print("="*55)
     for r in results:
-        print(f"  {r['name']:<23} {r['accuracy']:.3f}      {r['accuracy'] - baseline:+.3f}")
+        print(f" {r['name']:<23} {r['accuracy']:.3f} {r['accuracy'] - baseline:+.3f}")
     print("="*55)
 
     # full report for each

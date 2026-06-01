@@ -5,7 +5,7 @@ from features.games import get_games, build_rest_days_lookup, build_h2h_lookup
 from features.standings import get_standings, get_latest_standings_before
 from features.goalies import get_goalie_stats, build_goalie_rolling, get_goalie_sv_for_game
 from features.team_stats import get_team_stats, build_team_stats_rolling, get_team_stats_for_game
-
+from features.elo import build_elo_lookup, STARTING_ELO
 
 def build_features():
     print("Loading games...")
@@ -32,6 +32,10 @@ def build_features():
     print("Building H2H lookup...")
     h2h_lookup = build_h2h_lookup(games)
     print(f"  {len(h2h_lookup)} H2H entries built")
+
+    print("Building Elo lookup...")
+    elo_lookup = build_elo_lookup(games)
+    print(f"  {len(elo_lookup)} Elo entries built")
 
     rows = []
     skipped = 0
@@ -79,6 +83,9 @@ def build_features():
 
         # H2H
         h2h = h2h_lookup.get(game["id"], {})
+
+        # Elo
+        elo = elo_lookup.get(game["id"], {})
 
         row = {
             "game_id": game["id"],
@@ -154,6 +161,10 @@ def build_features():
             "diff_home_road_pctg": home_home_win_pctg - away_road_win_pctg,
 
             "h2h_home_win_pctg": h2h.get("h2h_home_win_pctg"),
+
+            "home_elo":  elo.get("home_elo", STARTING_ELO),
+            "away_elo":  elo.get("away_elo", STARTING_ELO),
+            "elo_diff":  elo.get("elo_diff", 0),
         }
         rows.append(row)
 

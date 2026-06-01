@@ -1,4 +1,4 @@
-# models/base.py
+# models/game.py
 
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
@@ -18,7 +18,7 @@ FEATURE_COLS = [
     "diff_points", "diff_goalie_sv_pctg", "rest_advantage",
     "diff_pp_pctg", "diff_faceoff_pctg", "diff_sog",
     "home_home_win_pctg", "away_road_win_pctg", "diff_home_road_pctg",
-    "h2h_home_win_pctg"
+    "h2h_home_win_pctg", "home_elo", "away_elo", "elo_diff"
 ]
 
 def get_models():
