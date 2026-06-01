@@ -1,0 +1,6 @@
+# requirements.tsx
+
+supabase
+python-dotenv
+pandas
+scikit-learn
