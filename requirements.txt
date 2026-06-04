@@ -1,4 +1,4 @@
-# requirements.tsx
+# requirements.txt
 
 supabase
 python-dotenv
