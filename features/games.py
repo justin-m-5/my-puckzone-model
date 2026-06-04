@@ -8,6 +8,19 @@ def get_games():
     query = supabase.table("games").select("id, season, date, home_team_id, away_team_id, home_score, away_score").eq("game_type", 2).in_("game_state", ["OFF", "FINAL"])
     return pd.DataFrame(fetch_all("games", query))
 
+
+def get_all_games():
+    """Fetch completed regular season AND playoff games. Used for live predictions
+    so that playoff games played so far are included in rest days, H2H, and Elo."""
+    query = supabase.table("games").select("id, season, game_type, date, home_team_id, away_team_id, home_score, away_score").in_("game_type", [2, 3]).in_("game_state", ["OFF", "FINAL"])
+    return pd.DataFrame(fetch_all("games", query))
+
+
+def get_playoff_games():
+    """Fetch completed playoff games only."""
+    query = supabase.table("games").select("id, season, game_type, date, home_team_id, away_team_id, home_score, away_score").eq("game_type", 3).in_("game_state", ["OFF", "FINAL"])
+    return pd.DataFrame(fetch_all("games", query))
+
 def build_rest_days_lookup(games_df):
     """
     For each team + game, compute how many days rest they had

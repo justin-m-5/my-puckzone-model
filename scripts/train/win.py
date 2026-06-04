@@ -1,20 +1,19 @@
-# scripts/train.py
-
+# scripts/train/win.py
 """
-Run this once you have decided on the best model from compare.py.
-Trains the chosen model on ALL data and saves it to disk.
+Trains the regular season win prediction model.
+Saves to win_model.pkl.
 
 Usage:
-    python3 train.py
+    PYTHONPATH=. python3 -m scripts.train.win
 """
 
 import pickle
 import pandas as pd
-from features import build_features
+from features.training import build_features
 from models import FEATURE_COLS, get_models, train_model
 
-# --- change this to whichever model won in compare.py ---
 BEST_MODEL = "Gradient Boosting"
+
 
 def train():
     df = build_features()
@@ -26,7 +25,7 @@ def train():
     X_train, X_test = X[~test_mask], X[test_mask]
     y_train, y_test = y[~test_mask], y[test_mask]
 
-    print(f"\nTraining {BEST_MODEL} on all data...")
+    print(f"\nTraining {BEST_MODEL}...")
     model_cfg = get_models()[BEST_MODEL]
     result = train_model(BEST_MODEL, model_cfg, X_train, y_train, X_test, y_test)
 
@@ -35,17 +34,17 @@ def train():
     print(f"Beat baseline by: {result['accuracy'] - y_test.mean():+.3f}")
     print(f"\n{result['report']}")
 
-    # save model + scaler to disk
     payload = {
         "model": result["model"],
         "scaler": result["scaler"],
         "feature_cols": FEATURE_COLS,
         "model_name": BEST_MODEL,
     }
-    with open("model.pkl", "wb") as f:
+    with open("win_model.pkl", "wb") as f:
         pickle.dump(payload, f)
 
-    print(f"\nModel saved to model.pkl")
+    print("\nSaved to win_model.pkl")
+
 
 if __name__ == "__main__":
     train()

@@ -1,4 +1,4 @@
-# builder.py
+# features/training/builder.py
 
 import pandas as pd
 from features.games import get_games, build_rest_days_lookup, build_h2h_lookup
