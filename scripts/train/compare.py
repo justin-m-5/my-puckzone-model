@@ -39,12 +39,34 @@ def compare():
             result["feature_cols"] = cols
             results.append(result)
 
-    print("\n" + "=" * 55)
-    print(f"{'Feature Set':<14} {'Model':<25} {'Accuracy':>10} {'vs Baseline':>12}")
-    print("=" * 55)
+    if not results:
+        print("\nNo model results to display.")
+        return
+
+    feature_col_width = max(len("Feature Set"), *[len(r["feature_set"]) for r in results])
+    model_col_width = max(len("Model"), *[len(r["name"]) for r in results])
+    accuracy_col_width = 10
+    baseline_col_width = 12
+    column_separator_width = 3  # three single-space separators between the table columns
+    table_width = (
+        feature_col_width
+        + model_col_width
+        + accuracy_col_width
+        + baseline_col_width
+        + column_separator_width
+    )
+    print("\n" + "=" * table_width)
+    print(
+        f"{'Feature Set':<{feature_col_width}} {'Model':<{model_col_width}} "
+        f"{'Accuracy':>{accuracy_col_width}} {'vs Baseline':>{baseline_col_width}}"
+    )
+    print("=" * table_width)
     for r in results:
-        print(f" {r['feature_set']:<14} {r['name']:<25} {r['accuracy']:.3f} {r['accuracy'] - baseline:+.3f}")
-    print("=" * 55)
+        print(
+            f"{r['feature_set']:<{feature_col_width}} {r['name']:<{model_col_width}} "
+            f"{r['accuracy']:.3f} {r['accuracy'] - baseline:+.3f}"
+        )
+    print("=" * table_width)
 
     for r in results:
         print(f"\n--- {r['feature_set']} | {r['name']} ---")
