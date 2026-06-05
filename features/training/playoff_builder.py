@@ -1,11 +1,11 @@
 # features/training/playoff_builder.py
 """
-Builds training features for playoff games.
-Uses the same 41 base features as win_model PLUS 4 playoff-specific features:
-  - series_game_number : which game in the series (1-7)
-  - home_series_wins   : home team wins in series BEFORE this game
-  - away_series_wins   : away team wins in series BEFORE this game
-  - seed_diff          : home_seed - away_seed (negative = home is better seeded)
+Builds training features for playoff games (base FEATURE_COLS + 4 playoff cols).
+Now also includes the rolling advanced shot-share diffs (Corsi / xG / high-danger)
+from features/advanced.py, matching the regular-season builder.
+
+The 2020 "bubble" play-in qualifiers (round_number == 0) and round-robin seeding
+games (no playoff_series row) are EXCLUDED.
 """
 
 import pandas as pd
@@ -15,13 +15,10 @@ from features.standings import get_standings, get_latest_standings_before
 from features.goalies import get_goalie_stats, build_goalie_rolling, get_goalie_sv_for_game
 from features.team_stats import get_team_stats, build_team_stats_rolling, get_team_stats_for_game
 from features.elo import build_elo_lookup, STARTING_ELO
+from features.advanced import build_advanced_rolling, get_advanced_for_game
 
 
 def _get_seeds_lookup():
-    """
-    Returns dict: (bracket_year, team_id) -> seed_rank
-    bracket_year is the calendar year of the playoffs (e.g. 2026 for 2025-26 season).
-    """
     query = supabase.table("playoff_series").select(
         "bracket_year, top_seed_team_id, top_seed_rank, bottom_seed_team_id, bottom_seed_rank"
     )
@@ -35,42 +32,43 @@ def _get_seeds_lookup():
     return lookup
 
 
-def _build_series_state_lookup(playoff_games):
-    """
-    For each playoff game, compute the pre-game series state.
-    Groups games by (season, sorted team pair) to identify each series.
+def _get_series_round_lookup():
+    """(bracket_year, frozenset{team_a, team_b}) -> round_number, to drop bubble games."""
+    query = supabase.table("playoff_series").select(
+        "bracket_year, round_number, top_seed_team_id, bottom_seed_team_id"
+    )
+    rows = fetch_all("playoff_series", query)
+    lookup = {}
+    for row in rows:
+        top = row["top_seed_team_id"]
+        bottom = row["bottom_seed_team_id"]
+        if top and bottom and row["round_number"] is not None:
+            lookup[(row["bracket_year"], frozenset((top, bottom)))] = row["round_number"]
+    return lookup
 
-    Returns dict: game_id -> {series_game_number, home_series_wins, away_series_wins}
-    """
+
+def _build_series_state_lookup(playoff_games):
     pg = playoff_games.copy().sort_values("date").reset_index(drop=True)
     pg["team_pair"] = pg.apply(
         lambda r: tuple(sorted([int(r["home_team_id"]), int(r["away_team_id"])])), axis=1
     )
-
     lookup = {}
-
     for (season, team_pair), group in pg.groupby(["season", "team_pair"]):
         group = group.sort_values("date").reset_index(drop=True)
         team_a_id, team_b_id = team_pair
         wins = {team_a_id: 0, team_b_id: 0}
-
         for game_num, (_, game) in enumerate(group.iterrows(), start=1):
             home_id = int(game["home_team_id"])
             away_id = int(game["away_team_id"])
-
-            # Record PRE-game state
             lookup[game["id"]] = {
                 "series_game_number": game_num,
                 "home_series_wins": wins[home_id],
                 "away_series_wins": wins[away_id],
             }
-
-            # Update wins after recording
             if game["home_score"] > game["away_score"]:
                 wins[home_id] += 1
             else:
                 wins[away_id] += 1
-
     return lookup
 
 
@@ -87,7 +85,6 @@ def build_playoff_features():
         print("ERROR: No playoff games found. Check game_type=3 rows exist in Supabase.")
         return pd.DataFrame()
 
-    # All lookups use full game history so context is accurate
     rest_lookup = build_rest_days_lookup(all_games)
 
     print("Loading standings...")
@@ -109,24 +106,39 @@ def build_playoff_features():
     print("Building Elo lookup...")
     elo_lookup = build_elo_lookup(all_games)
 
+    print("Building advanced metrics (Corsi / xG / high-danger)...")
+    advanced_lookup = build_advanced_rolling(games_df=all_games)
+
     print("Loading playoff series seeds...")
     seeds_lookup = _get_seeds_lookup()
+
+    print("Loading playoff series rounds...")
+    round_lookup = _get_series_round_lookup()
 
     print("Building series state lookup...")
     series_lookup = _build_series_state_lookup(playoff_games)
 
     def bracket_year(season):
-        # e.g. 20252026 -> 2026
         return int(str(season)[4:])
 
     rows = []
     skipped = 0
+    excluded_bubble = 0
 
     print("Building features for each playoff game...")
     for _, game in playoff_games.iterrows():
+        by = bracket_year(game["season"])
+
+        # Exclude 2020 bubble play-in (round 0) + round-robin (no series row -> None)
+        series_round = round_lookup.get(
+            (by, frozenset((int(game["home_team_id"]), int(game["away_team_id"]))))
+        )
+        if series_round is None or series_round == 0:
+            excluded_bubble += 1
+            continue
+
         home = get_latest_standings_before(standings, game["home_team_id"], game["season"], game["date"])
         away = get_latest_standings_before(standings, game["away_team_id"], game["season"], game["date"])
-
         if home is None or away is None:
             skipped += 1
             continue
@@ -142,6 +154,9 @@ def build_playoff_features():
         home_ts = get_team_stats_for_game(team_stats_lookup, game["id"], game["home_team_id"])
         away_ts = get_team_stats_for_game(team_stats_lookup, game["id"], game["away_team_id"])
 
+        home_adv = get_advanced_for_game(advanced_lookup, game["id"], game["home_team_id"])
+        away_adv = get_advanced_for_game(advanced_lookup, game["id"], game["away_team_id"])
+
         home_pk = (1 - away_ts.get("pp_pctg")) if away_ts.get("pp_pctg") is not None else None
         away_pk = (1 - home_ts.get("pp_pctg")) if home_ts.get("pp_pctg") is not None else None
 
@@ -156,9 +171,7 @@ def build_playoff_features():
         h2h = h2h_lookup.get(game["id"], {})
         elo = elo_lookup.get(game["id"], {})
 
-        # Playoff-specific features
         series = series_lookup.get(game["id"], {})
-        by = bracket_year(game["season"])
         home_seed = seeds_lookup.get((by, game["home_team_id"]))
         away_seed = seeds_lookup.get((by, game["away_team_id"]))
         seed_diff = (home_seed - away_seed) if (home_seed is not None and away_seed is not None) else None
@@ -171,7 +184,6 @@ def build_playoff_features():
             "away_team_id": game["away_team_id"],
             "target": home_win,
 
-            # --- 41 base features (must match win_model FEATURE_COLS exactly) ---
             "home_point_pctg": home["point_pctg"] or 0.5,
             "home_win_pctg": home["win_pctg"] or 0.5,
             "home_reg_win_pctg": home["regulation_win_pctg"] or 0.5,
@@ -210,6 +222,12 @@ def build_playoff_features():
             "diff_pk_pctg": (home_pk or 0) - (away_pk or 0),
             "diff_faceoff_pctg": (home_ts.get("faceoff_winning_pctg") or 0) - (away_ts.get("faceoff_winning_pctg") or 0),
             "diff_sog": (home_ts.get("sog") or 0) - (away_ts.get("sog") or 0),
+
+            # advanced shot-share diffs
+            "diff_cf_pct": (home_adv.get("cf_pct") or 0.5) - (away_adv.get("cf_pct") or 0.5),
+            "diff_xgf_pct": (home_adv.get("xgf_pct") or 0.5) - (away_adv.get("xgf_pct") or 0.5),
+            "diff_hdcf_pct": (home_adv.get("hdcf_pct") or 0.5) - (away_adv.get("hdcf_pct") or 0.5),
+
             "home_home_win_pctg": home_home_win_pctg,
             "away_road_win_pctg": away_road_win_pctg,
             "diff_home_road_pctg": home_home_win_pctg - away_road_win_pctg,
@@ -218,7 +236,7 @@ def build_playoff_features():
             "away_elo": elo.get("away_elo", STARTING_ELO),
             "elo_diff": elo.get("elo_diff", 0),
 
-            # --- 4 playoff-specific features ---
+            # playoff-specific
             "series_game_number": series.get("series_game_number"),
             "home_series_wins": series.get("home_series_wins"),
             "away_series_wins": series.get("away_series_wins"),
@@ -227,5 +245,9 @@ def build_playoff_features():
         rows.append(row)
 
     df = pd.DataFrame(rows)
-    print(f"  Built {len(df)} playoff feature rows, skipped {skipped}")
+    print(
+        f"  Built {len(df)} playoff feature rows "
+        f"(excluded {excluded_bubble} bubble play-in/round-robin, "
+        f"skipped {skipped} missing standings)"
+    )
     return df

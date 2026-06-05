@@ -6,6 +6,7 @@ from features.standings import get_standings, get_latest_standings_before
 from features.goalies import get_goalie_stats, build_goalie_rolling, get_goalie_sv_for_game
 from features.team_stats import get_team_stats, build_team_stats_rolling, get_team_stats_for_game
 from features.elo import build_elo_lookup, STARTING_ELO
+from features.advanced import build_advanced_rolling, get_advanced_for_game
 
 def build_features():
     print("Loading games...")
@@ -37,6 +38,10 @@ def build_features():
     elo_lookup = build_elo_lookup(games)
     print(f"  {len(elo_lookup)} Elo entries built")
 
+    print("Building advanced metrics (Corsi / xG / high-danger)...")
+    advanced_lookup = build_advanced_rolling(games_df=games)
+    print(f"  {len(advanced_lookup)} advanced rolling entries built")
+
     rows = []
     skipped = 0
 
@@ -66,6 +71,10 @@ def build_features():
         # team rolling stats
         home_ts = get_team_stats_for_game(team_stats_lookup, game["id"], game["home_team_id"])
         away_ts = get_team_stats_for_game(team_stats_lookup, game["id"], game["away_team_id"])
+
+        # advanced rolling shares (Corsi / xG / high-danger)
+        home_adv = get_advanced_for_game(advanced_lookup, game["id"], game["home_team_id"])
+        away_adv = get_advanced_for_game(advanced_lookup, game["id"], game["away_team_id"])
 
         # pk% derived from opponent's rolling pp%
         home_pk = (1 - away_ts.get("pp_pctg")) if away_ts.get("pp_pctg") is not None else None
@@ -154,6 +163,11 @@ def build_features():
             "diff_sog": (home_ts.get("sog") or 0) - (away_ts.get("sog") or 0),
             "diff_goals_for_per_game": home_gf_pg - away_gf_pg,
             "diff_goals_against_per_game": home_ga_pg - away_ga_pg,
+
+            # advanced shot-share diffs (neutral 0.5 fill -> diff of 0 when missing)
+            "diff_cf_pct": (home_adv.get("cf_pct") or 0.5) - (away_adv.get("cf_pct") or 0.5),
+            "diff_xgf_pct": (home_adv.get("xgf_pct") or 0.5) - (away_adv.get("xgf_pct") or 0.5),
+            "diff_hdcf_pct": (home_adv.get("hdcf_pct") or 0.5) - (away_adv.get("hdcf_pct") or 0.5),
 
             # home/away splits
             "home_home_win_pctg": home_home_win_pctg,

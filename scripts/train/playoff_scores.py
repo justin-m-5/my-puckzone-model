@@ -35,7 +35,7 @@ def train():
     y_home = df["home_score"]
     y_away = df["away_score"]
 
-    test_mask = df["season"] == 20242025
+    test_mask = df["season"] == 20252026
     X_train, X_test = X[~test_mask], X[test_mask]
     y_home_train, y_home_test = y_home[~test_mask], y_home[test_mask]
     y_away_train, y_away_test = y_away[~test_mask], y_away[test_mask]

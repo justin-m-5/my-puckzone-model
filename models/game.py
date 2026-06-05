@@ -17,6 +17,10 @@ FEATURE_COLS = [
     "diff_point_pctg", "diff_goal_diff", "diff_l10_points",
     "diff_points", "diff_goalie_sv_pctg", "rest_advantage",
     "diff_pp_pctg", "diff_faceoff_pctg", "diff_sog",
+    # --- advanced shot-share metrics (rolling, from features/advanced.py) ---
+    "diff_cf_pct",     # Corsi: shot-attempt share
+    "diff_xgf_pct",    # Expected-goals share
+    "diff_hdcf_pct",   # High-danger chance share
     "home_home_win_pctg", "away_road_win_pctg", "diff_home_road_pctg",
     "h2h_home_win_pctg", "home_elo", "away_elo", "elo_diff"
 ]

@@ -18,7 +18,7 @@ def compare():
     X = df[FEATURE_COLS].fillna(0.5)
     y = df["target"]
 
-    test_mask = df["season"] == 20242025
+    test_mask = df["season"] == 20252026
     X_train, X_test = X[~test_mask], X[test_mask]
     y_train, y_test = y[~test_mask], y[test_mask]
 

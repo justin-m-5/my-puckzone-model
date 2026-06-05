@@ -70,6 +70,9 @@ def predict():
     scaler = payload["scaler"]
     feature_cols = payload["feature_cols"]
     model_name = payload["model_name"]
+    # Tuned decision threshold (set by scripts/train/playoff.py). Defaults to 0.5
+    # for any model that doesn't carry one.
+    threshold = payload.get("decision_threshold", 0.5)
 
     # Load appropriate score model for the game type
     score_payload = load_score_model("playoff_score_model.pkl" if is_playoff else "score_model.pkl")
@@ -84,8 +87,8 @@ def predict():
     # --- predict ---
     prob = model.predict_proba(X)[0]
     away_prob, home_prob = prob[0], prob[1]
-    winner = home_name if home_prob > 0.5 else away_name
-    winner_abbr = home_abbr if home_prob > 0.5 else away_abbr
+    winner = home_name if home_prob > threshold else away_name
+    winner_abbr = home_abbr if home_prob > threshold else away_abbr
 
     # score estimate: use trained score model if available, else fall back to goals/game
     if score_payload is not None:
@@ -102,6 +105,9 @@ def predict():
     print(f"  {home_name:<25} (home): {home_prob * 100:.1f}%")
     print(f"  {away_name:<25} (away): {away_prob * 100:.1f}%")
     print(f"  Predicted winner: {winner}")
+    if threshold != 0.5:
+        print(f"  (home picked when home win% > {threshold * 100:.0f}% — "
+              f"threshold tuned to correct playoff home-ice bias)")
     print(f"\n  Predicted score: {home_abbr} {home_gf:.1f} - {away_gf:.1f} {away_abbr}")
     print(f"  Rounded:         {home_abbr} {round(home_gf)} - {round(away_gf)} {away_abbr}")
     print(f"{'=' * 50}")

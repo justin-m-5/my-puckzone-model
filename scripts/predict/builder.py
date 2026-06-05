@@ -8,6 +8,7 @@ from features.team_stats import get_team_stats, build_team_stats_rolling
 from features.elo import build_elo_lookup, STARTING_ELO
 from features.games import get_games, get_all_games, build_rest_days_lookup, build_h2h_lookup
 from features.playoffs import get_series_context
+from features.advanced import build_advanced_team_games, ROLL_WINDOW
 
 
 def build_prediction_row(home_team_id, away_team_id, game_date, is_playoff):
@@ -123,6 +124,29 @@ def build_prediction_row(home_team_id, away_team_id, game_date, is_playoff):
     home_elo = get_latest_elo(home_team_id)
     away_elo = get_latest_elo(away_team_id)
 
+    # --- add right after home_elo / away_elo are computed (after line ~124) ---
+    # --- advanced rolling shares (Corsi / xG / high-danger) ---
+    print("  Loading advanced metrics (Corsi / xG / high-danger)...")
+    adv_games = build_advanced_team_games(games_df=games)
+
+    def get_latest_advanced(team_id):
+        """Current form = mean share over the team's last ROLL_WINDOW completed games."""
+        if adv_games.empty:
+            return {}
+        g = adv_games[adv_games["team_id"] == team_id].sort_values("date")
+        if g.empty:
+            return {}
+        tail = g.tail(ROLL_WINDOW)
+        return {
+            "cf_pct": tail["cf_pct"].mean(),
+            "xgf_pct": tail["xgf_pct"].mean(),
+            "hdcf_pct": tail["hdcf_pct"].mean(),
+        }
+
+    home_adv = get_latest_advanced(home_team_id)
+    away_adv = get_latest_advanced(away_team_id)
+
+
     # --- derived values ---
     home_pk = (1 - away_ts["pp_pctg"]) if away_ts.get("pp_pctg") is not None else None
     away_pk = (1 - home_ts["pp_pctg"]) if home_ts.get("pp_pctg") is not None else None
@@ -185,6 +209,10 @@ def build_prediction_row(home_team_id, away_team_id, game_date, is_playoff):
         "home_elo": home_elo,
         "away_elo": away_elo,
         "elo_diff": home_elo - away_elo,
+
+        "diff_cf_pct": (home_adv.get("cf_pct") or 0.5) - (away_adv.get("cf_pct") or 0.5),
+        "diff_xgf_pct": (home_adv.get("xgf_pct") or 0.5) - (away_adv.get("xgf_pct") or 0.5),
+        "diff_hdcf_pct": (home_adv.get("hdcf_pct") or 0.5) - (away_adv.get("hdcf_pct") or 0.5),
     }
 
     debug = {
