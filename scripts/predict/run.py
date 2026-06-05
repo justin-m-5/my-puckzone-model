@@ -10,6 +10,7 @@ Usage:
 
 import pickle
 import pandas as pd
+from models import fill_features
 from scripts.predict.inputs import pick_team, get_game_date, get_game_type
 from scripts.predict.builder import build_prediction_row
 
@@ -80,7 +81,7 @@ def predict():
     # --- build features ---
     row, debug = build_prediction_row(home_id, away_id, game_date, is_playoff)
 
-    X = pd.DataFrame([row])[feature_cols].fillna(0.5)
+    X = fill_features(pd.DataFrame([row])[feature_cols])
     if scaler:
         X = scaler.transform(X)
 
@@ -92,7 +93,7 @@ def predict():
 
     # score estimate: use trained score model if available, else fall back to goals/game
     if score_payload is not None:
-        X_score = pd.DataFrame([row])[score_payload["feature_cols"]].fillna(0.5)
+        X_score = fill_features(pd.DataFrame([row])[score_payload["feature_cols"]])
         home_gf = score_payload["home_model"].predict(X_score)[0]
         away_gf = score_payload["away_model"].predict(X_score)[0]
     else:

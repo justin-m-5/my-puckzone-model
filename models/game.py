@@ -4,6 +4,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import accuracy_score, classification_report
+import pandas as pd
 
 FEATURE_COLS = [
     "home_point_pctg", "home_win_pctg", "home_reg_win_pctg",
@@ -50,6 +51,50 @@ FEATURE_COLS_LEAN = [
     "diff_hdcf_pct_5v5",
 ]
 assert set(FEATURE_COLS_LEAN).issubset(set(FEATURE_COLS))
+
+# Per-column neutral fill values for missing features. 0.5 is correct only for
+# share/percentage features (Corsi%, xGF%, win%, etc.), so list every NON-0.5
+# column explicitly here. Anything not listed falls back to 0.5.
+NEUTRAL_FILLS = {
+    # goalie rolling GSAx: league-average GSAx is ~0
+    "home_goalie_gsax": 0.0,
+    "away_goalie_gsax": 0.0,
+    "diff_goalie_gsax": 0.0,
+    # goalie rolling save%: league-average sv% is ~0.90
+    "home_goalie_sv_pctg": 0.90,
+    "away_goalie_sv_pctg": 0.90,
+    "diff_goalie_sv_pctg": 0.0,
+    # rest days: a normal rest is ~2 days; b2b flags default to 0
+    "home_rest_days": 2.0,
+    "away_rest_days": 2.0,
+    "rest_advantage": 0.0,
+    "home_is_b2b": 0.0,
+    "away_is_b2b": 0.0,
+    # raw team rolling counts/rates: fall back to their rough league means
+    "home_sog": 30.0, "away_sog": 30.0, "diff_sog": 0.0,
+    "home_hits": 20.0, "away_hits": 20.0,
+    "home_blocked_shots": 14.0, "away_blocked_shots": 14.0,
+    "home_pp_pctg": 0.20, "away_pp_pctg": 0.20, "diff_pp_pctg": 0.0,
+    "home_faceoff_pctg": 0.50, "away_faceoff_pctg": 0.50, "diff_faceoff_pctg": 0.0,
+    # goal-diff style integer features are centered at 0
+    "home_goal_diff": 0.0, "away_goal_diff": 0.0, "diff_goal_diff": 0.0,
+    "diff_points": 0.0, "diff_l10_points": 0.0,
+    "home_l10_points": 0.0, "away_l10_points": 0.0,
+    # elo
+    "home_elo": 1500.0, "away_elo": 1500.0, "elo_diff": 0.0,
+}
+
+
+def fill_features(X: pd.DataFrame) -> pd.DataFrame:
+    """Neutral-fill a feature DataFrame column-by-column.
+
+    Uses NEUTRAL_FILLS for known columns and 0.5 for anything else (share/pct
+    features and any future column). Returns a new filled DataFrame; does not
+    mutate the input. This MUST be used identically in training and prediction
+    so the model sees the same imputation at fit and inference time.
+    """
+    fills = {col: NEUTRAL_FILLS.get(col, 0.5) for col in X.columns}
+    return X.fillna(value=fills)
 
 def get_models():
     """Returns all models we want to compare."""
