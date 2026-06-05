@@ -11,7 +11,7 @@ PLAYOFF_EXTRA_COLS = [
     "seed_diff",
 ]
 
-# Full feature list: 41 base (same as win_model) + 4 playoff-specific
+# Full feature list: 51 base (same as win_model) + 4 playoff-specific
 PLAYOFF_FEATURE_COLS = FEATURE_COLS + PLAYOFF_EXTRA_COLS
 
 

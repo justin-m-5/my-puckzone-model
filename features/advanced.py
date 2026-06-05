@@ -44,7 +44,7 @@ HD_MAX_DIST_FT = 20.0       # feet in front of the goal line
 HD_MAX_HALFWIDTH_FT = 22.0  # half-width of the slot (faceoff dots ~ ±22)
 
 ROLL_WINDOW = 10
-ROLL_COLS = ["cf_pct", "xgf_pct", "hdcf_pct"]
+ROLL_COLS = ["cf_pct", "xgf_pct", "hdcf_pct", "cf_pct_5v5", "xgf_pct_5v5", "hdcf_pct_5v5"]
 GAME_ID_BATCH_SIZE = 50
 
 
@@ -176,7 +176,8 @@ def get_materialized_team_games():
     """
     try:
         query = supabase.table("game_advanced_stats").select(
-            "game_id, team_id, season, date, cf_pct, xgf_pct, hdcf_pct"
+            "game_id, team_id, season, date, cf_pct, xgf_pct, hdcf_pct, "
+            "cf_pct_5v5, xgf_pct_5v5, hdcf_pct_5v5"
         )
         df = pd.DataFrame(fetch_all("game_advanced_stats", query))
     except Exception as e:
@@ -185,7 +186,7 @@ def get_materialized_team_games():
     if df.empty:
         return df
     df["date"] = pd.to_datetime(df["date"])
-    for c in ["cf_pct", "xgf_pct", "hdcf_pct"]:
+    for c in ["cf_pct", "xgf_pct", "hdcf_pct", "cf_pct_5v5", "xgf_pct_5v5", "hdcf_pct_5v5"]:
         df[c] = pd.to_numeric(df[c], errors="coerce")
     return df
 
@@ -208,15 +209,16 @@ def build_advanced_rolling(games_df=None, window=ROLL_WINDOW, use_materialized=T
     if fg.empty:
         return {}
 
+    roll_cols = [c for c in ROLL_COLS if c in fg.columns]
     lookup = {}
     for team_id, group in fg.groupby("team_id"):
         group = group.sort_values("date").reset_index(drop=True)
-        for col in ROLL_COLS:
+        for col in roll_cols:
             group[f"r_{col}"] = group[col].shift(1).rolling(window, min_periods=3).mean()
         for _, row in group.iterrows():
             lookup[(row["game_id"], team_id)] = {
                 col: (row[f"r_{col}"] if pd.notna(row[f"r_{col}"]) else None)
-                for col in ROLL_COLS
+                for col in roll_cols
             }
     return lookup
 

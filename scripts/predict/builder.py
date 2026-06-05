@@ -2,7 +2,12 @@
 
 import pandas as pd
 from features.standings import get_standings, get_latest_standings_before
-from features.goalies import get_goalie_stats, build_goalie_rolling
+from features.goalies import (
+    get_goalie_stats,
+    build_goalie_rolling,
+    get_goalie_advanced_stats,
+    build_gsax_rolling,
+)
 from features.team_stats import get_team_stats, build_team_stats_rolling
 from features.elo import build_elo_lookup, STARTING_ELO
 from features.games import get_all_games
@@ -53,6 +58,19 @@ def build_prediction_row(home_team_id, away_team_id, game_date, is_playoff):
 
     home_sv = get_latest_goalie_sv(home_team_id)
     away_sv = get_latest_goalie_sv(away_team_id)
+
+    gsax_df = get_goalie_advanced_stats(games_df=games)
+    gsax_lookup = build_gsax_rolling(gsax_df)
+
+    def get_latest_goalie_gsax(team_id):
+        recent = goalie_df[goalie_df["team_id"] == team_id].sort_values("date")
+        if recent.empty:
+            return None
+        last = recent.iloc[-1]
+        return gsax_lookup.get((last["game_id"], last["player_id"]), None)
+
+    home_gsax = get_latest_goalie_gsax(home_team_id)
+    away_gsax = get_latest_goalie_gsax(away_team_id)
 
     # --- team rolling stats ---
     print("  Loading team stats...")
@@ -140,6 +158,9 @@ def build_prediction_row(home_team_id, away_team_id, game_date, is_playoff):
             "cf_pct": tail["cf_pct"].mean(),
             "xgf_pct": tail["xgf_pct"].mean(),
             "hdcf_pct": tail["hdcf_pct"].mean(),
+            "cf_pct_5v5": tail["cf_pct_5v5"].mean() if "cf_pct_5v5" in tail.columns else None,
+            "xgf_pct_5v5": tail["xgf_pct_5v5"].mean() if "xgf_pct_5v5" in tail.columns else None,
+            "hdcf_pct_5v5": tail["hdcf_pct_5v5"].mean() if "hdcf_pct_5v5" in tail.columns else None,
         }
 
     home_adv = get_latest_advanced(home_team_id)
@@ -165,6 +186,7 @@ def build_prediction_row(home_team_id, away_team_id, game_date, is_playoff):
         "home_goal_diff": home_std["goal_differential"] or 0,
         "home_l10_points": home_std["l10_points"] or 0,
         "home_goalie_sv_pctg": home_sv,
+        "home_goalie_gsax": home_gsax,
         "home_rest_days": home_rest,
         "home_is_b2b": 1 if home_rest == 1 else 0,
         "home_pp_pctg": home_ts.get("pp_pctg"),
@@ -179,6 +201,7 @@ def build_prediction_row(home_team_id, away_team_id, game_date, is_playoff):
         "away_goal_diff": away_std["goal_differential"] or 0,
         "away_l10_points": away_std["l10_points"] or 0,
         "away_goalie_sv_pctg": away_sv,
+        "away_goalie_gsax": away_gsax,
         "away_rest_days": away_rest,
         "away_is_b2b": 1 if away_rest == 1 else 0,
         "away_pp_pctg": away_ts.get("pp_pctg"),
@@ -192,6 +215,7 @@ def build_prediction_row(home_team_id, away_team_id, game_date, is_playoff):
         "diff_l10_points": (home_std["l10_points"] or 0) - (away_std["l10_points"] or 0),
         "diff_points": (home_std["points"] or 0) - (away_std["points"] or 0),
         "diff_goalie_sv_pctg": (home_sv or 0) - (away_sv or 0),
+        "diff_goalie_gsax": (home_gsax or 0) - (away_gsax or 0),
         "rest_advantage": (home_rest or 2) - (away_rest or 2),
         "diff_pp_pctg": (home_ts.get("pp_pctg") or 0) - (away_ts.get("pp_pctg") or 0),
         "diff_pk_pctg": (home_pk or 0) - (away_pk or 0),
@@ -212,6 +236,9 @@ def build_prediction_row(home_team_id, away_team_id, game_date, is_playoff):
         "diff_cf_pct": (home_adv.get("cf_pct") or 0.5) - (away_adv.get("cf_pct") or 0.5),
         "diff_xgf_pct": (home_adv.get("xgf_pct") or 0.5) - (away_adv.get("xgf_pct") or 0.5),
         "diff_hdcf_pct": (home_adv.get("hdcf_pct") or 0.5) - (away_adv.get("hdcf_pct") or 0.5),
+        "diff_cf_pct_5v5": (home_adv.get("cf_pct_5v5") or 0.5) - (away_adv.get("cf_pct_5v5") or 0.5),
+        "diff_xgf_pct_5v5": (home_adv.get("xgf_pct_5v5") or 0.5) - (away_adv.get("xgf_pct_5v5") or 0.5),
+        "diff_hdcf_pct_5v5": (home_adv.get("hdcf_pct_5v5") or 0.5) - (away_adv.get("hdcf_pct_5v5") or 0.5),
     }
 
     debug = {

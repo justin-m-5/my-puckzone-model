@@ -34,12 +34,12 @@ features/
   plays.py                   Shot events + xG feature builder
   playoffs.py                Playoff series context (wins, seeding) from Supabase
   training/
-    builder.py               Build regular season training dataset (41 features)
-    playoff_builder.py       Build playoff training dataset (41 + 4 series features)
+    builder.py               Build regular season training dataset (51 features)
+    playoff_builder.py       Build playoff training dataset (51 + 4 series features)
 
 models/
-  game.py                    Win model definition + FEATURE_COLS (41 features)
-  playoff.py                 Playoff win model + PLAYOFF_FEATURE_COLS (45 features)
+  game.py                    Win model definition + FEATURE_COLS (51 features)
+  playoff.py                 Playoff win model + PLAYOFF_FEATURE_COLS (55 features)
   player.py                  Player point prediction model
   xg.py                      Expected goals model
 
@@ -117,6 +117,8 @@ PYTHONPATH=. python3 -m scripts.train.compare
 Advanced per-game metrics (Corsi / Fenwick / xG / high-danger, including 5v5
 splits) are populated into Supabase `game_advanced_stats` by
 [my-puckzone-ingest](https://github.com/justin-m-5/my-puckzone-ingest).
-Feature builders in this repo read that table directly. Keep
+Per-game goalie advanced metrics (including GSAx) are populated into
+`game_goalie_advanced_stats` and consumed by the feature builders here.
+Feature builders in this repo read those tables directly. Keep
 `scripts.train.xg` up to date here because ingest uses its copy of
 `xg_model.pkl` to produce `xGF` / `xGA` values during ingest.
