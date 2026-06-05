@@ -28,6 +28,29 @@ FEATURE_COLS = [
     "h2h_home_win_pctg", "home_elo", "away_elo", "elo_diff"
 ]
 
+# A leaner, decorrelated subset for experimentation. Prefers matchup diffs over
+# raw home/away pairs, drops redundant Corsi (xGF/HDCF dominate), and removes the
+# near-zero rest / back-to-back / last-10 tail. Compare against the full set with
+# scripts.train.compare; nothing in production reads this unless you wire it in.
+FEATURE_COLS_LEAN = [
+    "elo_diff",
+    "diff_goal_diff",
+    "diff_point_pctg",
+    "diff_points",
+    "diff_home_road_pctg",
+    "h2h_home_win_pctg",
+    "diff_goalie_sv_pctg",
+    "diff_goalie_gsax",
+    "diff_pp_pctg",
+    "diff_faceoff_pctg",
+    "diff_sog",
+    "diff_xgf_pct",
+    "diff_hdcf_pct",
+    "diff_xgf_pct_5v5",
+    "diff_hdcf_pct_5v5",
+]
+assert set(FEATURE_COLS_LEAN).issubset(set(FEATURE_COLS))
+
 def get_models():
     """Returns all models we want to compare."""
     return {
