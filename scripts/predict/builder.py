@@ -1,14 +1,13 @@
 # scripts/predict/builder.py
 
 import pandas as pd
-from db import supabase, fetch_all
 from features.standings import get_standings, get_latest_standings_before
 from features.goalies import get_goalie_stats, build_goalie_rolling
 from features.team_stats import get_team_stats, build_team_stats_rolling
 from features.elo import build_elo_lookup, STARTING_ELO
-from features.games import get_games, get_all_games, build_rest_days_lookup, build_h2h_lookup
+from features.games import get_all_games
 from features.playoffs import get_series_context
-from features.advanced import build_advanced_team_games, ROLL_WINDOW
+from features.advanced import get_materialized_team_games, build_advanced_team_games, ROLL_WINDOW
 
 
 def build_prediction_row(home_team_id, away_team_id, game_date, is_playoff):
@@ -124,10 +123,10 @@ def build_prediction_row(home_team_id, away_team_id, game_date, is_playoff):
     home_elo = get_latest_elo(home_team_id)
     away_elo = get_latest_elo(away_team_id)
 
-    # --- add right after home_elo / away_elo are computed (after line ~124) ---
-    # --- advanced rolling shares (Corsi / xG / high-danger) ---
     print("  Loading advanced metrics (Corsi / xG / high-danger)...")
-    adv_games = build_advanced_team_games(games_df=games)
+    adv_games = get_materialized_team_games()
+    if adv_games.empty:
+        adv_games = build_advanced_team_games(games_df=games)
 
     def get_latest_advanced(team_id):
         """Current form = mean share over the team's last ROLL_WINDOW completed games."""
