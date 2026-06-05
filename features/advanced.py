@@ -9,6 +9,10 @@ Per team, per game:
 ...plus shares (CF%, xGF%, HDCF%) and rolling (prior-N-game) versions for use as
 features in the win/score models.
 
+Primary path: read pre-computed per-game shares from Supabase
+`game_advanced_stats`, populated by the `my-puckzone-ingest` repo. This module
+keeps a live play-by-play computation path as a safety fallback only.
+
 NOT trained models. Corsi/HDCF are COUNTED; xG is the only learned piece (loaded
 from xg_model.pkl). The point is feeding rolling team versions into win/scores.
 
@@ -55,19 +59,27 @@ def _load_xg_model(path="xg_model.pkl"):
 
 def get_shot_attempts(games_df=None):
     """All shot-attempt events joined to game metadata."""
-    query = supabase.table("game_plays").select(
-        "game_id, sort_order, type_desc_key, period, situation_code, "
-        "x_coord, y_coord, shot_type, event_owner_team_id"
-    ).in_("type_desc_key", SHOT_ATTEMPT_TYPES)
-    df = pd.DataFrame(fetch_all("game_plays", query))
-    if df.empty:
-        return df
-
     if games_df is None:
         games_df = get_all_games()
     games = games_df[["id", "season", "date", "home_team_id", "away_team_id"]].rename(
         columns={"id": "game_id"}
     )
+    game_ids = games["game_id"].tolist()
+
+    rows = []
+    batch_size = 50
+    for i in range(0, len(game_ids), batch_size):
+        batch = game_ids[i:i + batch_size]
+        query = supabase.table("game_plays").select(
+            "game_id, sort_order, type_desc_key, period, situation_code, "
+            "x_coord, y_coord, shot_type, event_owner_team_id"
+        ).in_("game_id", batch).in_("type_desc_key", SHOT_ATTEMPT_TYPES)
+        rows.extend(fetch_all("game_plays", query))
+
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return df
+
     df = df.merge(games, on="game_id", how="inner")
     df["date"] = pd.to_datetime(df["date"])
     return df
@@ -159,8 +171,8 @@ def build_advanced_team_games(games_df=None):
 def get_materialized_team_games():
     """
     Read pre-computed per-game advanced stats from game_advanced_stats
-    (populated by scripts/materialize_advanced.py). Returns an empty DataFrame
-    if the table is missing/empty so callers can fall back to live computation.
+    (populated by the my-puckzone-ingest repo). Returns an empty DataFrame if
+    the table is missing/empty so callers can fall back to live computation.
     """
     try:
         query = supabase.table("game_advanced_stats").select(
@@ -183,8 +195,9 @@ def build_advanced_rolling(games_df=None, window=ROLL_WINDOW, use_materialized=T
     Rolling (prior-N-game, leak-safe) advanced shares per team.
     Returns dict: (game_id, team_id) -> {cf_pct, xgf_pct, hdcf_pct}
 
-    Reads the materialized game_advanced_stats table when available (fast);
-    falls back to computing from play-by-play (slow) if the table is empty.
+    Reads the materialized game_advanced_stats table when available (fast,
+    ingest-managed); falls back to computing from play-by-play (slow) if the
+    table is empty.
     """
     fg = get_materialized_team_games() if use_materialized else pd.DataFrame()
     if not fg.empty:
