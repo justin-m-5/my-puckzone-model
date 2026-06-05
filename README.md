@@ -114,4 +114,9 @@ PYTHONPATH=. python3 -m scripts.train.player
 PYTHONPATH=. python3 -m scripts.train.compare
 ```
 
-Advanced per-game metrics (Corsi / Fenwick / xG / high-danger, including 5v5 splits) are populated into Supabase `game_advanced_stats` by [my-puckzone-ingest](https://github.com/justin-m-5/my-puckzone-ingest). Feature builders in this repo read that table directly. Keep `scripts.train.xg` up to date here because ingest uses its copy of `xg_model.pkl` to produce `xGF` / `xGA` values during ingest.
+Advanced per-game metrics (Corsi / Fenwick / xG / high-danger, including 5v5
+splits) are populated into Supabase `game_advanced_stats` by
+[my-puckzone-ingest](https://github.com/justin-m-5/my-puckzone-ingest).
+Feature builders in this repo read that table directly. Keep
+`scripts.train.xg` up to date here because ingest uses its copy of
+`xg_model.pkl` to produce `xGF` / `xGA` values during ingest.

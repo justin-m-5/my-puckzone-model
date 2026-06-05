@@ -45,6 +45,7 @@ HD_MAX_HALFWIDTH_FT = 22.0  # half-width of the slot (faceoff dots ~ ±22)
 
 ROLL_WINDOW = 10
 ROLL_COLS = ["cf_pct", "xgf_pct", "hdcf_pct"]
+GAME_ID_BATCH_SIZE = 50
 
 
 def _load_xg_model(path="xg_model.pkl"):
@@ -67,9 +68,8 @@ def get_shot_attempts(games_df=None):
     game_ids = games["game_id"].tolist()
 
     rows = []
-    batch_size = 50
-    for i in range(0, len(game_ids), batch_size):
-        batch = game_ids[i:i + batch_size]
+    for i in range(0, len(game_ids), GAME_ID_BATCH_SIZE):
+        batch = game_ids[i:i + GAME_ID_BATCH_SIZE]
         query = supabase.table("game_plays").select(
             "game_id, sort_order, type_desc_key, period, situation_code, "
             "x_coord, y_coord, shot_type, event_owner_team_id"
