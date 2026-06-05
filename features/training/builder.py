@@ -3,7 +3,14 @@
 import pandas as pd
 from features.games import get_games, build_rest_days_lookup, build_h2h_lookup
 from features.standings import get_standings, get_latest_standings_before
-from features.goalies import get_goalie_stats, build_goalie_rolling, get_goalie_sv_for_game
+from features.goalies import (
+    get_goalie_stats,
+    build_goalie_rolling,
+    get_goalie_sv_for_game,
+    get_goalie_advanced_stats,
+    build_gsax_rolling,
+    get_goalie_gsax_for_game,
+)
 from features.team_stats import get_team_stats, build_team_stats_rolling, get_team_stats_for_game
 from features.elo import build_elo_lookup, STARTING_ELO
 from features.advanced import build_advanced_rolling, get_advanced_for_game
@@ -24,6 +31,9 @@ def build_features():
     goalie_df = get_goalie_stats()
     goalie_lookup = build_goalie_rolling(goalie_df)
     print(f"  {len(goalie_df)} goalie starts loaded, {len(goalie_lookup)} rolling sv% entries")
+    gsax_df = get_goalie_advanced_stats()
+    gsax_lookup = build_gsax_rolling(gsax_df)
+    print(f"  {len(gsax_df)} goalie advanced rows loaded, {len(gsax_lookup)} rolling GSAx entries")
 
     print("Loading team stats...")
     team_stats_df = get_team_stats()
@@ -63,6 +73,8 @@ def build_features():
         # goalie rolling sv%
         home_sv = get_goalie_sv_for_game(goalie_df, goalie_lookup, game["id"], game["home_team_id"], True)
         away_sv = get_goalie_sv_for_game(goalie_df, goalie_lookup, game["id"], game["away_team_id"], False)
+        home_gsax = get_goalie_gsax_for_game(goalie_df, gsax_lookup, game["id"], game["home_team_id"], True)
+        away_gsax = get_goalie_gsax_for_game(goalie_df, gsax_lookup, game["id"], game["away_team_id"], False)
 
         # rest days
         home_rest = rest_lookup.get((game["id"], game["home_team_id"]), None)
@@ -127,7 +139,9 @@ def build_features():
 
             # goalie features
             "home_goalie_sv_pctg": home_sv,
+            "home_goalie_gsax": home_gsax,
             "away_goalie_sv_pctg": away_sv,
+            "away_goalie_gsax": away_gsax,
 
             # rest features
             "home_rest_days": home_rest,
@@ -157,6 +171,7 @@ def build_features():
             "diff_l10_points": (home["l10_points"] or 0) - (away["l10_points"] or 0),
             "diff_points": (home["points"] or 0) - (away["points"] or 0),
             "diff_goalie_sv_pctg": (home_sv or 0) - (away_sv or 0),
+            "diff_goalie_gsax": (home_gsax or 0) - (away_gsax or 0),
             "diff_pp_pctg": (home_ts.get("pp_pctg") or 0) - (away_ts.get("pp_pctg") or 0),
             "diff_pk_pctg": (home_pk or 0) - (away_pk or 0),
             "diff_faceoff_pctg": (home_ts.get("faceoff_winning_pctg") or 0) - (away_ts.get("faceoff_winning_pctg") or 0),
@@ -168,6 +183,9 @@ def build_features():
             "diff_cf_pct": (home_adv.get("cf_pct") or 0.5) - (away_adv.get("cf_pct") or 0.5),
             "diff_xgf_pct": (home_adv.get("xgf_pct") or 0.5) - (away_adv.get("xgf_pct") or 0.5),
             "diff_hdcf_pct": (home_adv.get("hdcf_pct") or 0.5) - (away_adv.get("hdcf_pct") or 0.5),
+            "diff_cf_pct_5v5": (home_adv.get("cf_pct_5v5") or 0.5) - (away_adv.get("cf_pct_5v5") or 0.5),
+            "diff_xgf_pct_5v5": (home_adv.get("xgf_pct_5v5") or 0.5) - (away_adv.get("xgf_pct_5v5") or 0.5),
+            "diff_hdcf_pct_5v5": (home_adv.get("hdcf_pct_5v5") or 0.5) - (away_adv.get("hdcf_pct_5v5") or 0.5),
 
             # home/away splits
             "home_home_win_pctg": home_home_win_pctg,

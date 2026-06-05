@@ -12,7 +12,14 @@ import pandas as pd
 from db import supabase, fetch_all
 from features.games import get_all_games, build_h2h_lookup, build_rest_days_lookup
 from features.standings import get_standings, get_latest_standings_before
-from features.goalies import get_goalie_stats, build_goalie_rolling, get_goalie_sv_for_game
+from features.goalies import (
+    get_goalie_stats,
+    build_goalie_rolling,
+    get_goalie_sv_for_game,
+    get_goalie_advanced_stats,
+    build_gsax_rolling,
+    get_goalie_gsax_for_game,
+)
 from features.team_stats import get_team_stats, build_team_stats_rolling, get_team_stats_for_game
 from features.elo import build_elo_lookup, STARTING_ELO
 from features.advanced import build_advanced_rolling, get_advanced_for_game
@@ -95,6 +102,9 @@ def build_playoff_features():
     goalie_df = get_goalie_stats(games_df=all_games)
     goalie_lookup = build_goalie_rolling(goalie_df)
     print(f"  {len(goalie_df)} goalie starts")
+    gsax_df = get_goalie_advanced_stats()
+    gsax_lookup = build_gsax_rolling(gsax_df)
+    print(f"  {len(gsax_df)} goalie advanced rows, {len(gsax_lookup)} rolling GSAx entries")
 
     print("Loading team stats (regular season + playoffs)...")
     team_stats_df = get_team_stats(games_df=all_games)
@@ -147,6 +157,8 @@ def build_playoff_features():
 
         home_sv = get_goalie_sv_for_game(goalie_df, goalie_lookup, game["id"], game["home_team_id"], True)
         away_sv = get_goalie_sv_for_game(goalie_df, goalie_lookup, game["id"], game["away_team_id"], False)
+        home_gsax = get_goalie_gsax_for_game(goalie_df, gsax_lookup, game["id"], game["home_team_id"], True)
+        away_gsax = get_goalie_gsax_for_game(goalie_df, gsax_lookup, game["id"], game["away_team_id"], False)
 
         home_rest = rest_lookup.get((game["id"], game["home_team_id"]), None)
         away_rest = rest_lookup.get((game["id"], game["away_team_id"]), None)
@@ -190,6 +202,7 @@ def build_playoff_features():
             "home_goal_diff": home["goal_differential"] or 0,
             "home_l10_points": home["l10_points"] or 0,
             "home_goalie_sv_pctg": home_sv,
+            "home_goalie_gsax": home_gsax,
             "home_rest_days": home_rest,
             "home_is_b2b": 1 if home_rest == 1 else 0,
             "home_pp_pctg": home_ts.get("pp_pctg"),
@@ -204,6 +217,7 @@ def build_playoff_features():
             "away_goal_diff": away["goal_differential"] or 0,
             "away_l10_points": away["l10_points"] or 0,
             "away_goalie_sv_pctg": away_sv,
+            "away_goalie_gsax": away_gsax,
             "away_rest_days": away_rest,
             "away_is_b2b": 1 if away_rest == 1 else 0,
             "away_pp_pctg": away_ts.get("pp_pctg"),
@@ -217,6 +231,7 @@ def build_playoff_features():
             "diff_l10_points": (home["l10_points"] or 0) - (away["l10_points"] or 0),
             "diff_points": (home["points"] or 0) - (away["points"] or 0),
             "diff_goalie_sv_pctg": (home_sv or 0) - (away_sv or 0),
+            "diff_goalie_gsax": (home_gsax or 0) - (away_gsax or 0),
             "rest_advantage": (home_rest or 2) - (away_rest or 2),
             "diff_pp_pctg": (home_ts.get("pp_pctg") or 0) - (away_ts.get("pp_pctg") or 0),
             "diff_pk_pctg": (home_pk or 0) - (away_pk or 0),
@@ -227,6 +242,9 @@ def build_playoff_features():
             "diff_cf_pct": (home_adv.get("cf_pct") or 0.5) - (away_adv.get("cf_pct") or 0.5),
             "diff_xgf_pct": (home_adv.get("xgf_pct") or 0.5) - (away_adv.get("xgf_pct") or 0.5),
             "diff_hdcf_pct": (home_adv.get("hdcf_pct") or 0.5) - (away_adv.get("hdcf_pct") or 0.5),
+            "diff_cf_pct_5v5": (home_adv.get("cf_pct_5v5") or 0.5) - (away_adv.get("cf_pct_5v5") or 0.5),
+            "diff_xgf_pct_5v5": (home_adv.get("xgf_pct_5v5") or 0.5) - (away_adv.get("xgf_pct_5v5") or 0.5),
+            "diff_hdcf_pct_5v5": (home_adv.get("hdcf_pct_5v5") or 0.5) - (away_adv.get("hdcf_pct_5v5") or 0.5),
 
             "home_home_win_pctg": home_home_win_pctg,
             "away_road_win_pctg": away_road_win_pctg,

@@ -8,19 +8,22 @@ from sklearn.metrics import accuracy_score, classification_report
 FEATURE_COLS = [
     "home_point_pctg", "home_win_pctg", "home_reg_win_pctg",
     "home_goal_diff", "home_l10_points",
-    "home_goalie_sv_pctg", "home_rest_days", "home_is_b2b",
+    "home_goalie_sv_pctg", "home_goalie_gsax", "home_rest_days", "home_is_b2b",
     "home_pp_pctg", "home_faceoff_pctg", "home_sog", "home_hits", "home_blocked_shots",
     "away_point_pctg", "away_win_pctg", "away_reg_win_pctg",
     "away_goal_diff", "away_l10_points",
-    "away_goalie_sv_pctg", "away_rest_days", "away_is_b2b",
+    "away_goalie_sv_pctg", "away_goalie_gsax", "away_rest_days", "away_is_b2b",
     "away_pp_pctg", "away_faceoff_pctg", "away_sog", "away_hits", "away_blocked_shots",
     "diff_point_pctg", "diff_goal_diff", "diff_l10_points",
-    "diff_points", "diff_goalie_sv_pctg", "rest_advantage",
+    "diff_points", "diff_goalie_sv_pctg", "diff_goalie_gsax", "rest_advantage",
     "diff_pp_pctg", "diff_faceoff_pctg", "diff_sog",
     # --- advanced shot-share metrics (rolling, from features/advanced.py) ---
     "diff_cf_pct",     # Corsi: shot-attempt share
     "diff_xgf_pct",    # Expected-goals share
     "diff_hdcf_pct",   # High-danger chance share
+    "diff_cf_pct_5v5",   # 5v5 Corsi share
+    "diff_xgf_pct_5v5",  # 5v5 Expected-goals share
+    "diff_hdcf_pct_5v5", # 5v5 High-danger chance share
     "home_home_win_pctg", "away_road_win_pctg", "diff_home_road_pctg",
     "h2h_home_win_pctg", "home_elo", "away_elo", "elo_diff"
 ]
