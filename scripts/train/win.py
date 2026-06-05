@@ -28,7 +28,8 @@ from sklearn.metrics import (
 from features.training import build_features
 from models import FEATURE_COLS, get_models
 
-BEST_MODEL = "Gradient Boosting"
+# Chosen from the latest compare run (best accuracy + calibrated linear/isotonic behavior).
+BEST_MODEL = "Logistic Regression"
 
 # 2020-21 regular season was played in empty/limited arenas -> weak home edge.
 # Add 20192020 too if you want to drop the COVID-shortened tail as well.
