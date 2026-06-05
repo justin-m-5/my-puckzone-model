@@ -13,7 +13,7 @@ from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.metrics import mean_absolute_error
 from db import supabase, fetch_all
 from features.training import build_features
-from models import FEATURE_COLS
+from models import FEATURE_COLS, fill_features
 
 
 def train():
@@ -23,7 +23,7 @@ def train():
     scores = pd.DataFrame(fetch_all("games", query)).rename(columns={"id": "game_id"})
     df = df.merge(scores, on="game_id", how="left").dropna(subset=["home_score", "away_score"])
 
-    X = df[FEATURE_COLS].fillna(0.5)
+    X = fill_features(df[FEATURE_COLS])
     y_home = df["home_score"]
     y_away = df["away_score"]
 

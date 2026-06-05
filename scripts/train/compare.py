@@ -9,7 +9,7 @@ Usage:
 
 import pandas as pd
 from features.training import build_features
-from models import FEATURE_COLS, FEATURE_COLS_LEAN, get_models, train_model
+from models import FEATURE_COLS, FEATURE_COLS_LEAN, fill_features, get_models, train_model
 
 
 def compare():
@@ -29,7 +29,7 @@ def compare():
 
     results = []
     for feature_set_name, cols in feature_sets.items():
-        X = df[cols].fillna(0.5)
+        X = fill_features(df[cols])
         X_train, X_test = X[~test_mask], X[test_mask]
 
         for name, model_cfg in get_models().items():

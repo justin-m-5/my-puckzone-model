@@ -36,6 +36,7 @@ from sklearn.metrics import (
     log_loss, brier_score_loss, roc_auc_score,
 )
 from features.training import build_playoff_features
+from models import fill_features
 from models.playoff import PLAYOFF_FEATURE_COLS, get_playoff_model
 
 # Last COMPLETE postseason. Do NOT use 20252026 while those playoffs are live.
@@ -79,15 +80,20 @@ def _importances(model, feature_cols):
         return np.abs(model.coef_).ravel(), "abs(coef)"
     if hasattr(model, "calibrated_classifiers_"):
         imps = []
+        source_kinds = set()
         for cc in model.calibrated_classifiers_:
             est = getattr(cc, "estimator", None) or getattr(cc, "base_estimator", None)
             if est is None:
                 continue
             if hasattr(est, "feature_importances_"):
                 imps.append(est.feature_importances_)
+                source_kinds.add("tree")
             elif hasattr(est, "coef_"):
                 imps.append(np.abs(est.coef_).ravel())
+                source_kinds.add("coef")
         if imps:
+            if source_kinds == {"coef"}:
+                return np.mean(imps, axis=0), "abs(coef) (avg over calibrated folds)"
             return np.mean(imps, axis=0), "tree importance (avg over calibrated folds)"
     return None, None
 
@@ -179,7 +185,7 @@ def train():
     print(f"Test season: {TEST_SEASON}")
     print(f"Calibration: {CALIBRATION_METHOD or 'none'}")
 
-    X = df[PLAYOFF_FEATURE_COLS].fillna(0.5).reset_index(drop=True)
+    X = fill_features(df[PLAYOFF_FEATURE_COLS]).reset_index(drop=True)
     y = df["target"].reset_index(drop=True)
     season_col = df["season"].reset_index(drop=True)
 

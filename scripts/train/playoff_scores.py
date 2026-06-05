@@ -13,6 +13,7 @@ from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.metrics import mean_absolute_error
 from db import supabase, fetch_all
 from features.training import build_playoff_features
+from models import fill_features
 from models.playoff import PLAYOFF_FEATURE_COLS
 
 
@@ -31,7 +32,7 @@ def train():
     print(f"Seasons: {[str(s) for s in seasons]}")
     print(f"Total playoff games with scores: {len(df)}")
 
-    X = df[PLAYOFF_FEATURE_COLS].fillna(0.5)
+    X = fill_features(df[PLAYOFF_FEATURE_COLS])
     y_home = df["home_score"]
     y_away = df["away_score"]
 

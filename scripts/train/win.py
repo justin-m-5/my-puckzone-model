@@ -26,7 +26,7 @@ from sklearn.metrics import (
     log_loss, brier_score_loss, roc_auc_score,
 )
 from features.training import build_features
-from models import FEATURE_COLS, get_models
+from models import FEATURE_COLS, fill_features, get_models
 
 # Chosen from the latest compare run (best accuracy + calibrated linear/isotonic behavior).
 BEST_MODEL = "Logistic Regression"
@@ -55,15 +55,20 @@ def _importances(model, feature_cols):
         return np.abs(model.coef_).ravel(), "abs(coef)"
     if hasattr(model, "calibrated_classifiers_"):
         imps = []
+        source_kinds = set()
         for cc in model.calibrated_classifiers_:
             est = getattr(cc, "estimator", None) or getattr(cc, "base_estimator", None)
             if est is None:
                 continue
             if hasattr(est, "feature_importances_"):
                 imps.append(est.feature_importances_)
+                source_kinds.add("tree")
             elif hasattr(est, "coef_"):
                 imps.append(np.abs(est.coef_).ravel())
+                source_kinds.add("coef")
         if imps:
+            if source_kinds == {"coef"}:
+                return np.mean(imps, axis=0), "abs(coef) (avg over calibrated folds)"
             return np.mean(imps, axis=0), "tree importance (avg over calibrated folds)"
     return None, None
 
@@ -114,7 +119,7 @@ def print_feature_importance(model, feature_cols, top_n=15):
 def train():
     df = build_features()
 
-    X = df[FEATURE_COLS].fillna(0.5)
+    X = fill_features(df[FEATURE_COLS])
     y = df["target"]
 
     test_mask = df["season"] == 20252026
