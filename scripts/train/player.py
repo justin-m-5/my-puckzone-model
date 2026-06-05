@@ -9,7 +9,6 @@ Usage:
 """
 
 import pickle
-import pandas as pd
 from features.players import get_skater_stats, build_skater_rolling, build_player_training_rows
 from models.player import PLAYER_FEATURE_COLS, get_player_models, train_player_model
 

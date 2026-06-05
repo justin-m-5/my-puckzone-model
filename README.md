@@ -95,6 +95,12 @@ When **Playoffs** is selected the predictor automatically uses `playoff_model.pk
 Run any of these from the repo root. Pre-trained `.pkl` files are already included — only retrain when you want to incorporate new seasons of data or add new features.
 
 ```bash
+# Required prep before win/playoff/score retraining:
+# 1) train xG
+PYTHONPATH=. python3 -m scripts.train.xg
+# 2) materialize per-game advanced metrics used by feature builders
+PYTHONPATH=. python3 -m scripts.materialize_advanced
+
 # Win probability
 PYTHONPATH=. python3 -m scripts.train.win
 PYTHONPATH=. python3 -m scripts.train.playoff
@@ -106,9 +112,8 @@ PYTHONPATH=. python3 -m scripts.train.playoff_scores
 # Player point prediction
 PYTHONPATH=. python3 -m scripts.train.player
 
-# Expected goals
-PYTHONPATH=. python3 -m scripts.train.xg
-
 # Compare win model variants before committing
 PYTHONPATH=. python3 -m scripts.train.compare
 ```
+
+Re-run `scripts.materialize_advanced` after retraining `scripts.train.xg` or after ingesting new games.

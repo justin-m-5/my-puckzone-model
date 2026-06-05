@@ -9,7 +9,6 @@ Usage:
 """
 
 import pickle
-import pandas as pd
 from features.plays import get_shot_events, build_xg_features
 from models.xg import XG_FEATURE_COLS, get_xg_models, train_xg_model
 

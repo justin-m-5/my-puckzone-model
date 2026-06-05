@@ -156,12 +156,42 @@ def build_advanced_team_games(games_df=None):
     return fg
 
 
-def build_advanced_rolling(games_df=None, window=ROLL_WINDOW):
+def get_materialized_team_games():
+    """
+    Read pre-computed per-game advanced stats from game_advanced_stats
+    (populated by scripts/materialize_advanced.py). Returns an empty DataFrame
+    if the table is missing/empty so callers can fall back to live computation.
+    """
+    try:
+        query = supabase.table("game_advanced_stats").select(
+            "game_id, team_id, season, date, cf_pct, xgf_pct, hdcf_pct"
+        )
+        df = pd.DataFrame(fetch_all("game_advanced_stats", query))
+    except Exception as e:
+        print(f"  (game_advanced_stats not readable: {e})")
+        return pd.DataFrame()
+    if df.empty:
+        return df
+    df["date"] = pd.to_datetime(df["date"])
+    for c in ["cf_pct", "xgf_pct", "hdcf_pct"]:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    return df
+
+
+def build_advanced_rolling(games_df=None, window=ROLL_WINDOW, use_materialized=True):
     """
     Rolling (prior-N-game, leak-safe) advanced shares per team.
     Returns dict: (game_id, team_id) -> {cf_pct, xgf_pct, hdcf_pct}
+
+    Reads the materialized game_advanced_stats table when available (fast);
+    falls back to computing from play-by-play (slow) if the table is empty.
     """
-    fg = build_advanced_team_games(games_df)
+    fg = get_materialized_team_games() if use_materialized else pd.DataFrame()
+    if not fg.empty:
+        print(f"  Using materialized advanced stats ({len(fg)} team-games)")
+    else:
+        print("  Computing advanced stats from play-by-play (slow)...")
+        fg = build_advanced_team_games(games_df)
     if fg.empty:
         return {}
 
