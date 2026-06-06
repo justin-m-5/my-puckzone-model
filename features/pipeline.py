@@ -50,6 +50,7 @@ _DEFAULT_ROLLING_WINDOW = 10
 _GOALIE_WINDOW = _DEFAULT_ROLLING_WINDOW
 _TEAM_STATS_WINDOW = _DEFAULT_ROLLING_WINDOW
 _ADVANCED_WINDOW = _DEFAULT_ROLLING_WINDOW
+_REGULAR_SEASON_GAME_TYPE = 2
 
 # Share columns kept in the advanced rolling table.
 _ADVANCED_COLS = [
@@ -361,6 +362,9 @@ def _h2h_as_of(
     """
     Head-to-head home-win% from all meetings before as_of_date.
     Returns None if no prior meetings exist.
+
+    Intentionally uncapped so serving matches the training definition
+    used by the existing regular-season model.
     """
     prior = games_df[
         (games_df["date"] < as_of_date)
@@ -803,8 +807,8 @@ def build_features_batch(
     # Elo always uses all completed games.
     elo_lookup = build_elo_lookup(ctx.games)
     h2h_source = ctx.games
-    if game_type == 2 and "game_type" in ctx.games.columns:
-        h2h_source = ctx.games[ctx.games["game_type"] == 2]
+    if game_type == _REGULAR_SEASON_GAME_TYPE and "game_type" in ctx.games.columns:
+        h2h_source = ctx.games[ctx.games["game_type"] == _REGULAR_SEASON_GAME_TYPE]
     h2h_lookup = build_h2h_lookup(h2h_source)
 
     rows = []

@@ -43,6 +43,9 @@ def build_h2h_lookup(games_df):
     """
     For each game, compute H2H record between the two teams
     from all prior meetings. Returns dict keyed by game_id.
+
+    NOTE: this is intentionally uncapped to match the historical
+    regular-season model training behavior.
     """
     games_df = games_df.sort_values("date").reset_index(drop=True)
     lookup = {}

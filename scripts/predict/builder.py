@@ -21,6 +21,8 @@ training batch builder.
 from features.pipeline import DataContext, build_feature_row
 from features.playoffs import get_series_context
 
+REGULAR_SEASON_GAME_TYPE = 2
+
 
 def build_prediction_row(home_team_id, away_team_id, game_date, is_playoff):
     """
@@ -54,7 +56,7 @@ def build_prediction_row(home_team_id, away_team_id, game_date, is_playoff):
         game_id=None,   # serving mode: use most recent starter, not actual starter
         season=season,
         h2h_games_df=(
-            ctx.games[ctx.games["game_type"] == 2]
+            ctx.games[ctx.games["game_type"] == REGULAR_SEASON_GAME_TYPE]
             if (not is_playoff and "game_type" in ctx.games.columns)
             else ctx.games
         ),

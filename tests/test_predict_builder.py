@@ -5,6 +5,8 @@ from features.pipeline import DataContext
 from scripts.predict import builder as predict_builder
 from tests.conftest import HOME_TEAM, AWAY_TEAM, TARGET_DATE
 
+MOCK_STALE_SERIES_WINS = 99
+
 
 def _ctx_with_games(ctx, games_df):
     return DataContext(
@@ -53,8 +55,8 @@ def test_playoff_prediction_row_adds_series_columns_and_uses_bracket_year(ctx, m
             "round_number": 1,
             "series_title": "Round 1",
             "series_abbrev": "R1",
-            "team_a_wins": 99,
-            "team_b_wins": 99,
+            "team_a_wins": MOCK_STALE_SERIES_WINS,
+            "team_b_wins": MOCK_STALE_SERIES_WINS,
             "team_a_seed": 2,
             "team_b_seed": 7,
             "series_clinched": False,

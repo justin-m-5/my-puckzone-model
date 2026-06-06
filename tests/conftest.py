@@ -51,7 +51,9 @@ def _make_games(start_date=datetime.date(2023, 10, 15)):
     rows = []
 
     # 12 prior HOME vs AWAY meetings before TARGET_DATE.
-    # First 2 are away wins, next 10 are home wins -> uncapped H2H != capped-10 H2H.
+    # First 2 are away wins, next 10 are home wins. This intentionally creates
+    # a 10/12 uncapped H2H baseline that differs from a capped last-10 (1.0)
+    # baseline, so cap-vs-uncap regressions are detectable.
     d = start_date
     for i in range(1, 13):
         home_score = 2 if i <= 2 else 4
