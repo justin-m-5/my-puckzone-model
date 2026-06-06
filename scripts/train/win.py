@@ -21,12 +21,13 @@ import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.calibration import CalibratedClassifierCV
-from sklearn.metrics import (
-    accuracy_score, classification_report,
-    log_loss, brier_score_loss, roc_auc_score,
-)
+from sklearn.metrics import accuracy_score, classification_report
 from features.training import build_features
 from models import FEATURE_COLS, fill_features, get_models
+from scripts.backtest.metrics import (
+    print_probability_metrics,  # noqa: F401 — re-exported for backward compat
+    print_feature_importance,   # noqa: F401 — re-exported for backward compat
+)
 
 # Chosen from the latest compare run (best accuracy + calibrated linear/isotonic behavior).
 BEST_MODEL = "Logistic Regression"
@@ -45,75 +46,6 @@ def _make_calibrated(estimator, method="isotonic", cv=5):
         return CalibratedClassifierCV(estimator=estimator, method=method, cv=cv)
     except TypeError:
         return CalibratedClassifierCV(base_estimator=estimator, method=method, cv=cv)
-
-
-def _importances(model, feature_cols):
-    """Pull feature importances, digging through a calibrated wrapper if needed."""
-    if hasattr(model, "feature_importances_"):
-        return model.feature_importances_, "tree importance"
-    if hasattr(model, "coef_"):
-        return np.abs(model.coef_).ravel(), "abs(coef)"
-    if hasattr(model, "calibrated_classifiers_"):
-        imps = []
-        source_kinds = set()
-        for cc in model.calibrated_classifiers_:
-            est = getattr(cc, "estimator", None) or getattr(cc, "base_estimator", None)
-            if est is None:
-                continue
-            if hasattr(est, "feature_importances_"):
-                imps.append(est.feature_importances_)
-                source_kinds.add("tree")
-            elif hasattr(est, "coef_"):
-                imps.append(np.abs(est.coef_).ravel())
-                source_kinds.add("coef")
-        if imps:
-            if source_kinds == {"coef"}:
-                return np.mean(imps, axis=0), "abs(coef) (avg over calibrated folds)"
-            return np.mean(imps, axis=0), "tree importance (avg over calibrated folds)"
-    return None, None
-
-
-def print_probability_metrics(home_prob, y_test):
-    """Evaluate as a probabilistic classifier, not just a 0/1 predictor."""
-    y_arr = np.asarray(y_test, dtype=float)
-
-    ll = log_loss(y_test, home_prob, labels=[0, 1])
-    brier = brier_score_loss(y_test, home_prob)
-    auc = roc_auc_score(y_test, home_prob)
-
-    base_rate = y_arr.mean()
-    base_probs = np.full_like(home_prob, base_rate, dtype=float)
-    base_ll = log_loss(y_test, base_probs, labels=[0, 1])
-    base_brier = brier_score_loss(y_test, base_probs)
-
-    print("\n--- Probabilistic metrics (lower log loss / Brier = better) ---")
-    print(f"  Log loss:  {ll:.4f}   (baseline {base_ll:.4f}, better by {base_ll - ll:+.4f})")
-    print(f"  Brier:     {brier:.4f}   (baseline {base_brier:.4f}, better by {base_brier - brier:+.4f})")
-    print(f"  ROC AUC:   {auc:.4f}   (0.5 = coin flip, 1.0 = perfect ranking)")
-    print(f"  Mean predicted home win%: {home_prob.mean() * 100:.1f}%  "
-          f"(actual home win%: {base_rate * 100:.1f}%)")
-
-    print("\n--- Calibration (predicted home win% vs actual) ---")
-    print(f"  {'bucket':>11}  {'n':>5}  {'pred':>6}  {'actual':>6}")
-    bins = np.linspace(0.0, 1.0, 11)
-    idx = np.clip(np.digitize(home_prob, bins) - 1, 0, len(bins) - 2)
-    for b in range(len(bins) - 1):
-        mask = idx == b
-        n = int(mask.sum())
-        if n == 0:
-            continue
-        label = f"{bins[b] * 100:>3.0f}-{bins[b + 1] * 100:>3.0f}%"
-        print(f"  {label:>11}  {n:>5}  {home_prob[mask].mean() * 100:>5.1f}%  {y_arr[mask].mean() * 100:>5.1f}%")
-
-
-def print_feature_importance(model, feature_cols, top_n=15):
-    importances, kind = _importances(model, feature_cols)
-    if importances is None:
-        return
-    ranked = sorted(zip(feature_cols, importances), key=lambda t: t[1], reverse=True)
-    print(f"\n--- Top {top_n} features ({kind}) ---")
-    for name, val in ranked[:top_n]:
-        print(f"  {name:<28} {val:.4f}")
 
 
 def train():
