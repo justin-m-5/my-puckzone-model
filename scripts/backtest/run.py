@@ -222,7 +222,7 @@ def run_backtest(
 
         print(
             f"  {test_season:<12} "
-            f"{m['n_games'] + int(train_mask.sum()):>7} "
+            f"{int(train_mask.sum()):>7} "
             f"{m['n_games']:>6} "
             f"{m['accuracy']:>7.3f} "
             f"{m['baseline_accuracy']:>7.3f} "

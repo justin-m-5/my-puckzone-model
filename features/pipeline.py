@@ -46,9 +46,10 @@ from features.elo import STARTING_ELO, K, HOME_ADV
 
 # Rolling window sizes — match v1.x behaviour exactly so existing .pkl files
 # continue to produce the same probability distributions.
-_GOALIE_WINDOW = 10
-_TEAM_STATS_WINDOW = 10
-_ADVANCED_WINDOW = 10
+_DEFAULT_ROLLING_WINDOW = 10
+_GOALIE_WINDOW = _DEFAULT_ROLLING_WINDOW
+_TEAM_STATS_WINDOW = _DEFAULT_ROLLING_WINDOW
+_ADVANCED_WINDOW = _DEFAULT_ROLLING_WINDOW
 
 # Share columns kept in the advanced rolling table.
 _ADVANCED_COLS = [
@@ -717,12 +718,14 @@ def _build_advanced_lookup_from_df(
     Keeping this here means the pipeline owns the rolling logic, so the batch
     and point-in-time paths share the same formula.
     """
-    from features.advanced import ROLL_COLS
-
+    # Use _ADVANCED_COLS (mirrors features.advanced.ROLL_COLS) so that this
+    # module does not import features.advanced at module level — that module
+    # connects to Supabase on import, which would break tests and CLI tooling
+    # that don't need a live DB.
     if advanced_df.empty:
         return {}
 
-    roll_cols = [c for c in ROLL_COLS if c in advanced_df.columns]
+    roll_cols = [c for c in _ADVANCED_COLS if c in advanced_df.columns]
     lookup: dict = {}
 
     for team_id, group in advanced_df.groupby("team_id"):

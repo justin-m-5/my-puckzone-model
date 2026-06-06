@@ -151,8 +151,8 @@ class TestParity:
         )
         assert pit is not None
         # With 10 prior starts and min_periods=3 the rolling should be defined.
-        assert pit["home_goalie_sv_pctg"] is not None, "home goalie sv% should be defined"
-        assert pit["away_goalie_sv_pctg"] is not None, "away goalie sv% should be defined"
+        assert pit["home_goalie_sv_pctg"] is not None, "home_goalie_sv_pctg should not be None"
+        assert pit["away_goalie_sv_pctg"] is not None, "away_goalie_sv_pctg should not be None"
 
     def test_goalie_features_match_between_paths(self, ctx):
         """
