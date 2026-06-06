@@ -69,6 +69,7 @@ def build_prediction_row(home_team_id, away_team_id, game_date, is_playoff):
     # --- playoff series context (extra display info, not model features) ---
     series = None
     if is_playoff:
+        # Playoff bracket year is the season end year (e.g., 2023-24 -> 2024).
         season_year = game_date.year if game_date.month >= 10 else game_date.year - 1
         bracket_year = season_year + 1
 
@@ -96,7 +97,8 @@ def build_prediction_row(home_team_id, away_team_id, game_date, is_playoff):
 
         try:
             series_meta = get_series_context(home_team_id, away_team_id, bracket_year)
-        except Exception:
+        except Exception as exc:
+            print(f"Warning: unable to load series context: {exc}")
             series_meta = None
 
         row["seed_diff"] = (
