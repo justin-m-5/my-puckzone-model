@@ -359,7 +359,7 @@ def _h2h_as_of(
     as_of_date: datetime.date,
 ):
     """
-    Head-to-head home-win% from the last 10 meetings before as_of_date.
+    Head-to-head home-win% from all meetings before as_of_date.
     Returns None if no prior meetings exist.
     """
     prior = games_df[
@@ -374,7 +374,7 @@ def _h2h_as_of(
                 & (games_df["away_team_id"] == home_id)
             )
         )
-    ].tail(10)
+    ]
 
     if prior.empty:
         return None
@@ -614,6 +614,7 @@ def build_feature_row(
     ctx: DataContext,
     game_id=None,
     season: int = None,
+    h2h_games_df: pd.DataFrame = None,
 ) -> dict:
     """
     Build a single feature row for a matchup using **only** data strictly
@@ -631,6 +632,9 @@ def build_feature_row(
                                    If None (serving mode), the most recent starter
                                    before as_of_date is used.
     season       : int | None     If None, inferred from as_of_date (Oct+ = season start).
+    h2h_games_df : pd.DataFrame | None
+                                   Optional games source for H2H calculation.
+                                   If None, uses ctx.games.
 
     Returns
     -------
@@ -676,7 +680,8 @@ def build_feature_row(
         ctx.games, home_team_id, away_team_id, as_of_date, season
     )
 
-    h2h = _h2h_as_of(ctx.games, home_team_id, away_team_id, as_of_date)
+    h2h_source = h2h_games_df if h2h_games_df is not None else ctx.games
+    h2h = _h2h_as_of(h2h_source, home_team_id, away_team_id, as_of_date)
 
     return _assemble_row(
         home_std=home_std,
@@ -795,10 +800,12 @@ def build_features_batch(
     # Supabase and uses the identical shift(1).rolling formula).
     advanced_lookup = _build_advanced_lookup_from_df(ctx.advanced_df)
 
-    # Use all games (including playoffs) for Elo and H2H so the lookups have
-    # the full picture; filter to the target game_type later.
+    # Elo always uses all completed games.
     elo_lookup = build_elo_lookup(ctx.games)
-    h2h_lookup = build_h2h_lookup(ctx.games)
+    h2h_source = ctx.games
+    if game_type == 2 and "game_type" in ctx.games.columns:
+        h2h_source = ctx.games[ctx.games["game_type"] == 2]
+    h2h_lookup = build_h2h_lookup(h2h_source)
 
     rows = []
     skipped = 0
