@@ -32,7 +32,7 @@ TARGET_DATE = datetime.date(2024, 1, 15)
 ALT_TARGET_GAME_ID = 105
 ALT_TARGET_DATE = datetime.date(2024, 1, 12)
 
-FUTURE_DATE = datetime.date(2024, 2, 1)
+POST_TARGET_DATE = datetime.date(2024, 2, 1)
 SEASON = 20232024
 
 GOALIE_BY_TEAM = {
@@ -317,7 +317,7 @@ def ctx_with_future(base_games):
         "id": 100,
         "season": SEASON,
         "game_type": 2,
-        "date": FUTURE_DATE,
+        "date": POST_TARGET_DATE,
         "home_team_id": HOME_TEAM,
         "away_team_id": AWAY_TEAM,
         "home_score": 5,
