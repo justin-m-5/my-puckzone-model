@@ -55,6 +55,11 @@ models/
 scripts/
   materialize/
     run.py                   Materialize model feature store + form snapshots
+  serve/
+    run.py                   Phase 2.3 daily orchestrator (predictions + market benchmarking)
+    writer.py                App-serving + benchmark table writers (idempotent upserts)
+    odds.py                  Odds provider adapter + implied probability normalization
+    benchmark.py             Per-game + daily benchmark metrics vs market
   predict/
     run.py                   Interactive game predictor (main entry point)
     builder.py               Assembles live features via unified pipeline for one game
@@ -197,6 +202,54 @@ Read-only flows continue to work with `SUPABASE_KEY`.
 Training builders (`features.training.build_features` / `build_playoff_features`)
 now prefer `model_game_features` when rows are present and automatically fall
 back to live pipeline computation when the table is empty/unavailable.
+
+---
+
+## Phase 2.3 daily serving + market benchmark pipeline
+
+`scripts.serve.run` orchestrates a deterministic daily cascade:
+1. Refresh/ingest inputs (games + optional odds snapshot)
+2. Refresh feature layer hook (`--force-recompute` for full refresh workflows)
+3. Generate goals-model predictions leak-safe as-of date
+4. Upsert app-facing serving rows
+5. Compute and upsert market benchmark rows (per-game + daily aggregate)
+
+### App-serving table contract (`model_game_predictions`)
+
+Core fields written per game/date:
+- identifiers: `game_id`, `date`, `season`, `home_team_id`, `away_team_id`
+- version metadata: `feature_version`, `model_version`, `run_id`, `generated_at`, `prediction_date`
+- predictive outputs: `home_win_probability`, `expected_home_goals`, `expected_away_goals`, `most_likely_home_score`, `most_likely_away_score`
+- optional uncertainty fields: `regulation_tie_probability`, `lambda_home`, `lambda_away`, `lambda3`
+- app safety/status fields: `is_finalized`, `data_source`
+
+Writes are idempotent via upsert key semantics:
+`(game_id, prediction_date, feature_version, model_version)`.
+
+### Benchmark tables
+
+- `model_market_benchmarks` (per game): market open/close probs, model edge, CLV-style log edge, optional realized Brier/log loss when outcomes are final.
+- `model_market_benchmark_daily` (daily aggregate): counts, mean edges, model/market daily Brier + log loss, calibration slices.
+
+### Commands
+
+```bash
+# Daily run (today by default)
+PYTHONPATH=. python3 -m scripts.serve.run
+
+# Explicit date + dry-run (no writes)
+PYTHONPATH=. python3 -m scripts.serve.run --date 2026-01-15 --dry-run
+
+# Historical replay/backfill
+PYTHONPATH=. python3 -m scripts.serve.run --start-date 2025-10-01 --end-date 2025-10-31
+
+# Skip odds ingestion/benchmark
+PYTHONPATH=. python3 -m scripts.serve.run --date 2026-01-15 --skip-odds
+```
+
+Odds provider config:
+- `ODDS_TABLE` (optional, default `market_odds`)
+- write paths still require `SUPABASE_SERVICE_ROLE_KEY` for upserts
 
 ---
 
