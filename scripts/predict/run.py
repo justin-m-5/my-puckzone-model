@@ -149,12 +149,15 @@ def get_prediction_inputs(game_id=None):
     is_playoff = game_type == PLAYOFF_GAME_TYPE
     home_team_id = int(game["home_team_id"])
     away_team_id = int(game["away_team_id"])
+    game_date = parse_game_date(game["date"])
     home_name, home_abbr = resolve_team_display(home_team_id)
     away_name, away_abbr = resolve_team_display(away_team_id)
+    home_goalie_id = get_optional_goalie_id("home", retry_on_invalid=False)
+    away_goalie_id = get_optional_goalie_id("away", retry_on_invalid=False)
 
     return {
         "game_id": int(game["id"]),
-        "game_date": parse_game_date(game["date"]),
+        "game_date": game_date,
         "game_type": game_type,
         "game_type_label": "playoffs" if is_playoff else "regular",
         "is_playoff": is_playoff,
@@ -164,8 +167,8 @@ def get_prediction_inputs(game_id=None):
         "away_name": away_name,
         "home_abbr": home_abbr,
         "away_abbr": away_abbr,
-        "home_goalie_id": get_optional_goalie_id("home", retry_on_invalid=False),
-        "away_goalie_id": get_optional_goalie_id("away", retry_on_invalid=False),
+        "home_goalie_id": home_goalie_id,
+        "away_goalie_id": away_goalie_id,
     }
 
 
@@ -237,9 +240,13 @@ def persist_prediction(prediction_inputs, result):
     if prediction_inputs["game_id"] is None:
         return
 
+    game_date = prediction_inputs.get("game_date")
+    if game_date is None:
+        raise ValueError("game_date is required when persisting a game-id prediction.")
+
     record = build_prediction_record(
         game_id=prediction_inputs["game_id"],
-        game_date=prediction_inputs["game_date"],
+        game_date=game_date,
         game_type=prediction_inputs["game_type"],
         home_team_id=prediction_inputs["home_team_id"],
         away_team_id=prediction_inputs["away_team_id"],
@@ -253,7 +260,7 @@ def persist_prediction(prediction_inputs, result):
         model_versions=result["model_versions"],
         input_snapshot={
             "game_id": prediction_inputs["game_id"],
-            "game_date": prediction_inputs["game_date"].isoformat(),
+            "game_date": game_date.isoformat(),
             "game_type": prediction_inputs["game_type"],
             "home_team_id": prediction_inputs["home_team_id"],
             "away_team_id": prediction_inputs["away_team_id"],
