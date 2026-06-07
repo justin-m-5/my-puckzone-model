@@ -7,7 +7,9 @@ import os
 load_dotenv()
 
 def get_client():
-    return create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+    # Service-role key is needed for materialize writes and bypasses RLS.
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY") or os.getenv("SUPABASE_KEY")
+    return create_client(os.getenv("SUPABASE_URL"), key)
 
 supabase = get_client()
 
