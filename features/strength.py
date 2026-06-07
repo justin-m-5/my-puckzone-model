@@ -375,13 +375,14 @@ def goalie_strength_as_of(
     team_rest_days,
     game_id=None,
     is_home=None,
+    starter_player_id=None,
 ) -> dict:
-    key = (team_id, season, as_of_date, game_id, is_home)
+    key = (team_id, season, as_of_date, game_id, is_home, starter_player_id)
     cache = state["goalie_cache"]
     if key in cache:
         return cache[key]
 
-    player_id = _starter_player_id(
+    player_id = int(starter_player_id) if starter_player_id is not None else _starter_player_id(
         state,
         team_id=team_id,
         as_of_date=as_of_date,
@@ -425,8 +426,10 @@ def goalie_strength_as_of(
         gsax_rows["season"] == prev_season
     ] if (prev_season is not None and not gsax_rows.empty) else pd.DataFrame()
 
-    current_gsax_vals = pd.to_numeric(current_gsax.get("gsax"), errors="coerce").dropna()
-    prev_gsax_vals = pd.to_numeric(prev_gsax.get("gsax"), errors="coerce").dropna()
+    current_gsax_series = current_gsax["gsax"] if "gsax" in current_gsax.columns else pd.Series(dtype=float)
+    prev_gsax_series = prev_gsax["gsax"] if "gsax" in prev_gsax.columns else pd.Series(dtype=float)
+    current_gsax_vals = pd.to_numeric(current_gsax_series, errors="coerce").dropna()
+    prev_gsax_vals = pd.to_numeric(prev_gsax_series, errors="coerce").dropna()
     current_gsax_mean = float(current_gsax_vals.mean()) if not current_gsax_vals.empty else league["league_gsax"]
     prev_gsax_mean = float(prev_gsax_vals.mean()) if not prev_gsax_vals.empty else league["league_gsax"]
     blended_gsax = _bayes_mean(

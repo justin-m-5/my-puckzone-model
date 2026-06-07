@@ -63,7 +63,7 @@ scripts/
   predict/
     run.py                   Interactive game predictor (main entry point)
     builder.py               Assembles live features via unified pipeline for one game
-    inputs.py                CLI prompts (team, date, game type)
+    inputs.py                CLI prompts (team, optional goalie id, date, game type)
     teams.py                 Team abbreviation → ID lookup
   train/
     win.py                   Train win_model.pkl (regular season)
@@ -184,9 +184,11 @@ PYTHONPATH=. python3 -m scripts.predict.run
 
 You will be prompted for:
 1. Home team abbreviation (e.g. `CAR`)
-2. Away team abbreviation (e.g. `VGK`)
-3. Game date (defaults to today)
-4. Game type — `1` Regular Season or `2` Playoffs
+2. Home team starting goalie id (optional, press Enter for auto-selection)
+3. Away team abbreviation (e.g. `VGK`)
+4. Away team starting goalie id (optional, press Enter for auto-selection)
+5. Game date (defaults to today)
+6. Game type — `1` Regular Season or `2` Playoffs
 
 ---
 

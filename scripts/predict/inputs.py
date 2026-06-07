@@ -18,6 +18,20 @@ def pick_team(label):
         print(f"  '{abbr}' not found. Try again.")
 
 
+def get_optional_goalie_id(label):
+    """Ask for an optional starting goalie player id."""
+    while True:
+        raw = input(
+            f"\nEnter {label} team starting goalie id [optional, Enter=auto]: "
+        ).strip()
+        if raw == "":
+            return None
+        try:
+            return int(raw)
+        except ValueError:
+            print(f"  Warning: '{raw}' is not numeric. Please enter a numeric id or press Enter.")
+
+
 def get_game_date():
     """Ask for a game date, defaulting to today."""
     today = datetime.date.today()

@@ -24,7 +24,15 @@ from features.playoffs import get_series_context
 REGULAR_SEASON_GAME_TYPE = 2
 
 
-def build_prediction_row(home_team_id, away_team_id, game_date, is_playoff, use_materialized=False):
+def build_prediction_row(
+    home_team_id,
+    away_team_id,
+    game_date,
+    is_playoff,
+    use_materialized=False,
+    home_goalie_id=None,
+    away_goalie_id=None,
+):
     """
     Pull live feature data from Supabase for the given matchup and return
     (feature_row_dict, debug_info_dict).
@@ -62,6 +70,8 @@ def build_prediction_row(home_team_id, away_team_id, game_date, is_playoff, use_
         ctx=ctx,
         game_id=None,   # serving mode: use most recent starter, not actual starter
         season=season,
+        home_goalie_id=home_goalie_id,
+        away_goalie_id=away_goalie_id,
         h2h_games_df=(
             ctx.games[ctx.games["game_type"] == REGULAR_SEASON_GAME_TYPE]
             if (not is_playoff and "game_type" in ctx.games.columns)
