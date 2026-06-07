@@ -144,6 +144,38 @@ row = build_feature_row(home_id, away_id, game_date, ctx)
 
 ---
 
+## Current daily ops (recommended)
+
+Issue #6 roadmap status: **Phases 2.0–2.3 completed (June 7, 2026)**.
+
+Use this as the canonical daily sequence:
+
+```bash
+# 1) Refresh materialized features (safe preview first)
+PYTHONPATH=. python3 -m scripts.materialize.run --dry-run
+PYTHONPATH=. python3 -m scripts.materialize.run
+
+# 2) Retrain core v2 models
+PYTHONPATH=. python3 -m scripts.train.xg
+PYTHONPATH=. python3 -m scripts.train.win
+PYTHONPATH=. python3 -m scripts.train.goals
+
+# 3) Generate predictions (recommended orchestrator path)
+PYTHONPATH=. python3 -m scripts.serve.run --date 2026-06-07 --dry-run
+PYTHONPATH=. python3 -m scripts.serve.run --date 2026-06-07
+
+# Fallback interactive predictor (still supported)
+PYTHONPATH=. python3 -m scripts.predict.run
+```
+
+Quick runbook:
+1. Pull latest `main`
+2. Refresh env/secrets
+3. Materialize `--dry-run`, then real write
+4. Retrain (`xg`, `win`, `goals`)
+5. Run `scripts.serve.run` (or `scripts.predict.run` fallback)
+6. Spot-check output table row counts and latest date
+
 ## Run a prediction
 
 ```bash
