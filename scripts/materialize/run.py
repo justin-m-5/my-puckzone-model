@@ -1,4 +1,7 @@
 import argparse
+import datetime
+
+import numpy as np
 import pandas as pd
 
 from db import upsert_rows
@@ -20,6 +23,33 @@ REGULAR_SEASON_GAME_TYPE = 2
 PLAYOFF_GAME_TYPE = 3
 FEATURE_VERSION = "v2.0"
 CHUNK_SIZE = 500
+
+
+def _json_safe(value):
+    if value is None or value is pd.NA or value is pd.NaT:
+        return None
+    if isinstance(value, pd.Timestamp):
+        dt_value = value.to_pydatetime()
+        if dt_value.time() == datetime.time.min:
+            return dt_value.date().isoformat()
+        return dt_value.isoformat()
+    if isinstance(value, datetime.datetime):
+        return value.isoformat()
+    if isinstance(value, datetime.date):
+        return value.isoformat()
+    if isinstance(value, np.integer):
+        return int(value)
+    if isinstance(value, np.floating):
+        return None if pd.isna(value) else float(value)
+    if isinstance(value, np.bool_):
+        return bool(value)
+    if pd.isna(value):
+        return None
+    return value
+
+
+def _clean_rows(rows: list[dict]) -> list[dict]:
+    return [{key: _json_safe(value) for key, value in row.items()} for row in rows]
 
 
 def _rows_for_game_type(ctx: DataContext, game_type: int) -> pd.DataFrame:
@@ -114,7 +144,8 @@ def build_form_snapshot_rows(ctx: DataContext, materialized_rows: list[dict]):
 
         for side in ("home", "away"):
             team_id = int(row[f"{side}_team_id"])
-            std = _standings_as_of(ctx.standings, team_id, season, as_of_date) or {}
+            std_row = _standings_as_of(ctx.standings, team_id, season, as_of_date)
+            std = {} if std_row is None else std_row
             team_stats = _team_stats_as_of(ctx.team_stats_df, team_id, as_of_date)
             advanced = _advanced_as_of(ctx.advanced_df, team_id, as_of_date)
 
@@ -175,21 +206,24 @@ def main():
     ctx = DataContext.from_supabase()
     rows = build_materialized_rows(ctx, limit=args.limit, game_type=args.game_type)
     team_rows, goalie_rows = build_form_snapshot_rows(ctx, rows)
+    clean_rows = _clean_rows(rows)
+    clean_team_rows = _clean_rows(team_rows)
+    clean_goalie_rows = _clean_rows(goalie_rows)
 
     by_type = pd.DataFrame(rows).groupby("game_type").size().to_dict() if rows else {}
     print(f"Built {len(rows)} model_game_features rows: {by_type}")
     print(f"Built {len(team_rows)} team_form_snapshots rows")
     print(f"Built {len(goalie_rows)} goalie_form_snapshots rows")
-    if rows:
-        print(f"Sample row: {rows[0]}")
+    if clean_rows:
+        print(f"Sample row: {clean_rows[0]}")
 
     if args.dry_run:
         print("Dry run complete. No writes performed.")
         return
 
-    _upsert_in_chunks("model_game_features", rows, on_conflict="game_id")
-    _upsert_in_chunks("team_form_snapshots", team_rows, on_conflict="team_id,as_of_date")
-    _upsert_in_chunks("goalie_form_snapshots", goalie_rows, on_conflict="player_id,as_of_date")
+    _upsert_in_chunks("model_game_features", clean_rows, on_conflict="game_id")
+    _upsert_in_chunks("team_form_snapshots", clean_team_rows, on_conflict="team_id,as_of_date")
+    _upsert_in_chunks("goalie_form_snapshots", clean_goalie_rows, on_conflict="player_id,as_of_date")
     print("Materialization complete.")
 
 
