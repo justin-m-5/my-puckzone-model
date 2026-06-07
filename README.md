@@ -14,7 +14,7 @@ Data is sourced from the NHL API and stored in Supabase via [my-puckzone-ingest]
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env   # add your SUPABASE_URL and SUPABASE_KEY
+cp .env.example .env   # add SUPABASE_URL/SUPABASE_KEY; add SUPABASE_SERVICE_ROLE_KEY for materialize writes
 ```
 
 ---
@@ -74,10 +74,6 @@ tests/
   conftest.py                In-memory DataContext fixtures (no Supabase required)
   test_pipeline.py           Parity tests + leakage tests for the unified pipeline
   test_materialized.py       Materialized store parity + fallback tests
-
-sql/
-  model_game_features.sql    DDL for model_game_features feature-store table
-  form_snapshots.sql         DDL for team/goalie point-in-time snapshot tables
 ```
 
 ---
@@ -170,13 +166,10 @@ PYTHONPATH=. python3 -m scripts.backtest.run --min-train-seasons 3
 
 ## Materialized feature store (Phase 2.0)
 
-Create the required tables once in Supabase SQL editor:
-
-```sql
--- paste SQL from:
---   sql/model_game_features.sql
---   sql/form_snapshots.sql
-```
+`model_game_features` and form snapshot tables are managed in
+[my-puckzone-db-migration](https://github.com/justin-m-5/my-puckzone-db-migration)
+under `migrations/` and applied with its `apply.sh`.
+Run that migration once before first materialization.
 
 Materialize leak-safe features and snapshots:
 
@@ -188,6 +181,10 @@ PYTHONPATH=. python3 -m scripts.materialize.run --dry-run
 PYTHONPATH=. python3 -m scripts.materialize.run --game-type 2 --limit 500
 PYTHONPATH=. python3 -m scripts.materialize.run --game-type 3
 ```
+
+Running `scripts.materialize.run` with writes requires
+`SUPABASE_SERVICE_ROLE_KEY` in `.env` (service role bypasses RLS on write paths).
+Read-only flows continue to work with `SUPABASE_KEY`.
 
 Training builders (`features.training.build_features` / `build_playoff_features`)
 now prefer `model_game_features` when rows are present and automatically fall
