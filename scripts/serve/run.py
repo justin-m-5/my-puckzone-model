@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import datetime
 import pickle
+import sys
 from dataclasses import dataclass
 
 import pandas as pd
@@ -61,8 +62,14 @@ def _default_model_version(payload: dict, path: str) -> str:
 
 
 def load_goals_payload(path: str = "goals_model.pkl") -> dict:
-    with open(path, "rb") as f:
-        return pickle.load(f)
+    try:
+        with open(path, "rb") as f:
+            return pickle.load(f)
+    except FileNotFoundError:
+        print(f"\nERROR: '{path}' not found.")
+        print("Train it with: PYTHONPATH=. python3 -m scripts.train.goals")
+        print("Tip: run 'PYTHONPATH=. python3 -m scripts.validate.artifacts' to check all required artifacts.")
+        sys.exit(1)
 
 
 def fetch_games_for_date(target_date: datetime.date) -> pd.DataFrame:

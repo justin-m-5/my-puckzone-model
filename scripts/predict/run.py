@@ -37,6 +37,7 @@ def load_model(path="win_model.pkl"):
     except FileNotFoundError:
         print(f"\nERROR: '{path}' not found.")
         print("Run 'PYTHONPATH=. python3 -m scripts.train.win' to train the win model.")
+        print("Tip: run 'PYTHONPATH=. python3 -m scripts.validate.artifacts' to check all required artifacts.")
         exit(1)
 
 
