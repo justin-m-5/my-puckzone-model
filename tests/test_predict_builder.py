@@ -6,6 +6,7 @@ from scripts.predict import builder as predict_builder
 from tests.conftest import HOME_TEAM, AWAY_TEAM, TARGET_DATE, GOALIE_HOME
 
 MOCK_STALE_SERIES_WINS = 99
+MOCK_BACKUP_GOALIE_ID = 999
 
 
 def _ctx_with_games(ctx, games_df):
@@ -27,12 +28,11 @@ def _with_home_goalie_override_candidate(ctx):
     ].sort_values("date")
     newest_home_start = home_recent.iloc[-1]
 
-    backup_goalie_id = 999
     goalie_df.loc[
         (goalie_df["game_id"] == newest_home_start["game_id"])
         & (goalie_df["team_id"] == HOME_TEAM),
         "player_id",
-    ] = backup_goalie_id
+    ] = MOCK_BACKUP_GOALIE_ID
     goalie_df.loc[
         (goalie_df["game_id"] == newest_home_start["game_id"])
         & (goalie_df["team_id"] == HOME_TEAM),
