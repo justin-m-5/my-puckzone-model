@@ -24,7 +24,7 @@ from features.playoffs import get_series_context
 REGULAR_SEASON_GAME_TYPE = 2
 
 
-def build_prediction_row(home_team_id, away_team_id, game_date, is_playoff):
+def build_prediction_row(home_team_id, away_team_id, game_date, is_playoff, use_materialized=False):
     """
     Pull live feature data from Supabase for the given matchup and return
     (feature_row_dict, debug_info_dict).
@@ -35,6 +35,9 @@ def build_prediction_row(home_team_id, away_team_id, game_date, is_playoff):
     away_team_id : int
     game_date    : datetime.date
     is_playoff   : bool
+    use_materialized : bool
+        Reserved fast-path flag for future snapshot-based serving. Default False
+        keeps current live behavior.
 
     Returns
     -------
@@ -42,6 +45,10 @@ def build_prediction_row(home_team_id, away_team_id, game_date, is_playoff):
                   and ``debug`` is a dict with human-readable display values.
     """
     print("\nFetching data from Supabase...")
+    if use_materialized:
+        # TODO(phase-2.0): optional serving fast path can read team/goalie form
+        # snapshots here when explicitly enabled.
+        pass
     ctx = DataContext.from_supabase()
 
     season_year = game_date.year if game_date.month >= 10 else game_date.year - 1

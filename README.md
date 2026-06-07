@@ -30,6 +30,7 @@ features/
                                - DataContext  injectable data container (no live DB needed for tests)
                                - build_feature_row()   single matchup, any as_of_date
                                - build_features_batch()  efficient batch for training
+  materialized.py            Materialized feature/snapshot readers + parsers
   games.py                   Load completed games (reg season + playoffs)
   standings.py               Daily team standings snapshots
   goalies.py                 Goalie rolling save % (last 10 starts)
@@ -50,6 +51,8 @@ models/
   xg.py                      Expected goals model
 
 scripts/
+  materialize/
+    run.py                   Materialize model feature store + form snapshots
   predict/
     run.py                   Interactive game predictor (main entry point)
     builder.py               Assembles live features via unified pipeline for one game
@@ -70,6 +73,11 @@ scripts/
 tests/
   conftest.py                In-memory DataContext fixtures (no Supabase required)
   test_pipeline.py           Parity tests + leakage tests for the unified pipeline
+  test_materialized.py       Materialized store parity + fallback tests
+
+sql/
+  model_game_features.sql    DDL for model_game_features feature-store table
+  form_snapshots.sql         DDL for team/goalie point-in-time snapshot tables
 ```
 
 ---
@@ -157,6 +165,33 @@ PYTHONPATH=. python3 -m scripts.backtest.run --model logistic --no-calibrate
 PYTHONPATH=. python3 -m scripts.backtest.run --exclude-seasons 20202021
 PYTHONPATH=. python3 -m scripts.backtest.run --min-train-seasons 3
 ```
+
+---
+
+## Materialized feature store (Phase 2.0)
+
+Create the required tables once in Supabase SQL editor:
+
+```sql
+-- paste SQL from:
+--   sql/model_game_features.sql
+--   sql/form_snapshots.sql
+```
+
+Materialize leak-safe features and snapshots:
+
+```bash
+# build + inspect without writing (no write creds needed)
+PYTHONPATH=. python3 -m scripts.materialize.run --dry-run
+
+# optional filters
+PYTHONPATH=. python3 -m scripts.materialize.run --game-type 2 --limit 500
+PYTHONPATH=. python3 -m scripts.materialize.run --game-type 3
+```
+
+Training builders (`features.training.build_features` / `build_playoff_features`)
+now prefer `model_game_features` when rows are present and automatically fall
+back to live pipeline computation when the table is empty/unavailable.
 
 ---
 
