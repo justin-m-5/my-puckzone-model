@@ -23,6 +23,10 @@ class FakeScoreModel:
         return np.array([self.value])
 
 
+def _raise_db_write_error(record):
+    raise RuntimeError("db write failed")
+
+
 def _patch_prediction_dependencies(monkeypatch):
     monkeypatch.setattr(
         predict_run,
@@ -253,11 +257,7 @@ def test_db_write_failure_still_prints_prediction_and_warns(monkeypatch, capsys)
     )
     inputs = iter(["", ""])
     monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
-    monkeypatch.setattr(
-        predict_run,
-        "write_game_prediction",
-        lambda record: (_ for _ in ()).throw(RuntimeError("db write failed")),
-    )
+    monkeypatch.setattr(predict_run, "write_game_prediction", _raise_db_write_error)
 
     exit_code = predict_run.predict(["--game-id", "13"])
 
