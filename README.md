@@ -261,3 +261,16 @@ Commands:
 PYTHONPATH=. python3 -m scripts.train.goals
 PYTHONPATH=. python3 -m scripts.backtest.run --model goals
 ```
+
+### Playoff series simulation (Phase 2.1)
+
+Phase 2.1 part 2 adds a best-of-7 Monte Carlo path that reuses the part-1
+goals model:
+- `models/series_sim.py` simulates playoff series with 2-2-1-1-1 home ice.
+- `scripts/backtest/series.py` evaluates historical playoff series at the
+  series level (calibration/accuracy), using leak-safe features as of series start.
+
+```bash
+PYTHONPATH=. python3 -m scripts.backtest.series
+PYTHONPATH=. python3 -m scripts.backtest.series --n-sims 50000 --seed 42
+```
