@@ -27,6 +27,7 @@ import pandas as pd
 import pytest
 
 from features.pipeline import (
+    DataContext,
     build_feature_row,
     build_features_batch,
 )
