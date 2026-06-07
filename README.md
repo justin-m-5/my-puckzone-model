@@ -38,6 +38,7 @@ features/
   elo.py                     Elo ratings updated game-by-game
   advanced.py                Corsi / xG / high-danger shares (materialized table + fallback)
   players.py                 Per-player rolling stats for point prediction
+  strength.py                Talent-aware team / goalie / lineup strength helpers
   plays.py                   Shot events + xG feature builder
   playoffs.py                Playoff series context (wins, seeding) from Supabase
   training/
@@ -45,9 +46,9 @@ features/
     playoff_builder.py       Playoff training dataset (thin wrapper + 4 series features)
 
 models/
-  game.py                    Win model definition + FEATURE_COLS (51 features)
+  game.py                    Win model definition + FEATURE_COLS (87 features)
   goals.py                   Bivariate Poisson goals model (Phase 2.1)
-  playoff.py                 Playoff win model + PLAYOFF_FEATURE_COLS (55 features)
+  playoff.py                 Playoff win model + PLAYOFF_FEATURE_COLS (91 features)
   player.py                  Player point prediction model
   xg.py                      Expected goals model
 
@@ -101,6 +102,8 @@ features/pipeline.py
 - Goalie rolling sv%/GSAx uses `shift(1).rolling(window)` in training and
   equivalent `tail(window)` on `date < as_of_date`-filtered data in serving.
 - Advanced shot-share rolling uses the same shift(1)-equivalent logic in both paths.
+- Talent-aware team / goalie / lineup strength features are derived from the same
+  point-in-time inputs and use neutral defaults when optional skater history is unavailable.
 - Neutral fills (`NEUTRAL_FILLS` from `models/game.py`) applied identically everywhere.
 
 **Injectable DataContext** — pass an in-memory `DataContext` for unit testing:
@@ -115,6 +118,7 @@ ctx = DataContext(
     gsax_df=my_gsax_df,
     team_stats_df=my_team_stats_df,
     advanced_df=my_advanced_df,
+    skater_df=my_skater_df,   # optional; lineup proxies fall back to neutral without it
 )
 row = build_feature_row(home_id, away_id, game_date, ctx)
 ```
@@ -273,4 +277,44 @@ goals model:
 ```bash
 PYTHONPATH=. python3 -m scripts.backtest.series
 PYTHONPATH=. python3 -m scripts.backtest.series --n-sims 50000 --seed 42
+```
+
+---
+
+## Talent-aware strength features (Phase 2.2 PR 2/2)
+
+Phase 2.2 PR 2/2 completes Phase 2.2 by extending the unified pipeline with
+additive talent-aware strength signals:
+
+- **Team strength** — Bayesian-smoothed offense/defense ratings, opponent-strength
+  schedule context, home/away split strength with shrinkage, and a recent-form
+  blend anchored to the longer-season baseline.
+- **Goalie strength** — current + prior-season blended save ability / GSAx proxy,
+  recent workload + fatigue context, and a team-defense-adjusted goalie signal.
+- **Lineup context** — recent-usage availability proxy for top skaters, top-skater
+  impact proxy, and a deployment concentration signal (top-heavy vs balanced).
+
+All of these features are computed strictly with `date < as_of_date`, are shared
+by training and serving through `features/pipeline.py`, and are materialized as
+additive nullable columns so older readers can still fall back safely.
+
+### Materialization / migration notes
+
+- `model_game_features` now includes the new strength columns in addition to the
+  existing feature set.
+- `team_form_snapshots` now carries team-strength + lineup snapshot fields.
+- `goalie_form_snapshots` now carries goalie strength context fields.
+- Schema migrations still belong in the ingest / SQL repo, not this model repo.
+  Add the new columns there as nullable columns; readers here already reindex /
+  fill missing optional columns safely during rollout.
+
+### Training / backtest commands
+
+Commands are unchanged; the new features flow through the existing builders:
+
+```bash
+PYTHONPATH=. python3 -m scripts.train.win
+PYTHONPATH=. python3 -m scripts.train.goals
+PYTHONPATH=. python3 -m scripts.backtest.run
+PYTHONPATH=. python3 -m pytest tests/ -v
 ```

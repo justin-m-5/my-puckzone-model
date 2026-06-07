@@ -43,6 +43,12 @@ import numpy as np
 import pandas as pd
 
 from features.elo import STARTING_ELO, K, HOME_ADV
+from features.strength import (
+    build_strength_state,
+    goalie_strength_as_of,
+    lineup_context_as_of,
+    team_strength_as_of,
+)
 
 # Rolling window sizes — match v1.x behaviour exactly so existing .pkl files
 # continue to produce the same probability distributions.
@@ -83,6 +89,7 @@ class DataContext:
         gsax_df: pd.DataFrame,
         team_stats_df: pd.DataFrame,
         advanced_df: pd.DataFrame,
+        skater_df: pd.DataFrame | None = None,
     ):
         self.games = _coerce_date(games.copy(), "date")
         self.standings = standings.copy()
@@ -94,6 +101,18 @@ class DataContext:
         self.gsax_df = _coerce_date(gsax_df.copy(), "date") if not gsax_df.empty else gsax_df.copy()
         self.team_stats_df = _coerce_date(team_stats_df.copy(), "date") if not team_stats_df.empty else team_stats_df.copy()
         self.advanced_df = _coerce_date(advanced_df.copy(), "date") if not advanced_df.empty else advanced_df.copy()
+        skater_df = pd.DataFrame() if skater_df is None else skater_df.copy()
+        if not skater_df.empty:
+            from features.players import build_skater_rolling
+
+            skater_df = _coerce_date(skater_df, "date")
+            if "season" not in skater_df.columns and "game_id" in skater_df.columns:
+                season_map = self.games[["id", "season"]].rename(columns={"id": "game_id"})
+                skater_df = skater_df.merge(season_map, on="game_id", how="left")
+            if "rolling_toi_sec" not in skater_df.columns:
+                skater_df = build_skater_rolling(skater_df)
+        self.skater_df = skater_df if not skater_df.empty else skater_df.copy()
+        self._strength_state = None
 
     @classmethod
     def from_supabase(cls) -> "DataContext":
@@ -101,6 +120,7 @@ class DataContext:
         from features.games import get_all_games
         from features.standings import get_standings
         from features.goalies import get_goalie_stats, get_goalie_advanced_stats
+        from features.players import get_skater_stats, build_skater_rolling
         from features.team_stats import get_team_stats
         from features.advanced import get_materialized_team_games, build_advanced_team_games
 
@@ -123,6 +143,13 @@ class DataContext:
             print("  Falling back to play-by-play computation...")
             advanced_df = build_advanced_team_games(games_df=games)
 
+        print("Loading skater stats...")
+        try:
+            skater_df = build_skater_rolling(get_skater_stats())
+        except Exception as exc:
+            print(f"  Skater stats unavailable ({exc}) — lineup features will use neutral defaults.")
+            skater_df = pd.DataFrame()
+
         return cls(
             games=games,
             standings=standings,
@@ -130,7 +157,19 @@ class DataContext:
             gsax_df=gsax_df,
             team_stats_df=team_stats_df,
             advanced_df=advanced_df,
+            skater_df=skater_df,
         )
+
+    def strength_state(self) -> dict:
+        if self._strength_state is None:
+            self._strength_state = build_strength_state(
+                self.games,
+                self.standings,
+                self.goalie_df,
+                self.gsax_df,
+                self.skater_df,
+            )
+        return self._strength_state
 
 
 # ---------------------------------------------------------------------------
@@ -457,6 +496,12 @@ def _assemble_row(
     away_ts: dict,
     home_adv: dict,
     away_adv: dict,
+    home_team_strength: dict,
+    away_team_strength: dict,
+    home_goalie_strength: dict,
+    away_goalie_strength: dict,
+    home_lineup: dict,
+    away_lineup: dict,
     h2h_home_win_pctg,
     home_elo: float,
     away_elo: float,
@@ -589,6 +634,51 @@ def _assemble_row(
         "diff_hdcf_pct_5v5": (home_adv.get("hdcf_pct_5v5") or 0.5) - (away_adv.get("hdcf_pct_5v5") or 0.5),
     })
 
+    row.update({
+        "home_team_off_strength": home_team_strength["team_off_strength"],
+        "away_team_off_strength": away_team_strength["team_off_strength"],
+        "diff_team_off_strength": home_team_strength["team_off_strength"] - away_team_strength["team_off_strength"],
+        "home_team_def_strength": home_team_strength["team_def_strength"],
+        "away_team_def_strength": away_team_strength["team_def_strength"],
+        "diff_team_def_strength": home_team_strength["team_def_strength"] - away_team_strength["team_def_strength"],
+        "home_team_schedule_strength": home_team_strength["team_schedule_strength"],
+        "away_team_schedule_strength": away_team_strength["team_schedule_strength"],
+        "diff_team_schedule_strength": home_team_strength["team_schedule_strength"] - away_team_strength["team_schedule_strength"],
+        "home_team_split_strength": home_team_strength["team_split_strength"],
+        "away_team_split_strength": away_team_strength["team_split_strength"],
+        "diff_team_split_strength": home_team_strength["team_split_strength"] - away_team_strength["team_split_strength"],
+        "home_team_form_blend": home_team_strength["team_form_blend"],
+        "away_team_form_blend": away_team_strength["team_form_blend"],
+        "diff_team_form_blend": home_team_strength["team_form_blend"] - away_team_strength["team_form_blend"],
+    })
+
+    row.update({
+        "home_goalie_talent_strength": home_goalie_strength["goalie_talent_strength"],
+        "away_goalie_talent_strength": away_goalie_strength["goalie_talent_strength"],
+        "diff_goalie_talent_strength": home_goalie_strength["goalie_talent_strength"] - away_goalie_strength["goalie_talent_strength"],
+        "home_goalie_workload": home_goalie_strength["goalie_workload"],
+        "away_goalie_workload": away_goalie_strength["goalie_workload"],
+        "diff_goalie_workload": home_goalie_strength["goalie_workload"] - away_goalie_strength["goalie_workload"],
+        "home_goalie_fatigue": home_goalie_strength["goalie_fatigue"],
+        "away_goalie_fatigue": away_goalie_strength["goalie_fatigue"],
+        "diff_goalie_fatigue": home_goalie_strength["goalie_fatigue"] - away_goalie_strength["goalie_fatigue"],
+        "home_goalie_team_adj_strength": home_goalie_strength["goalie_team_adj_strength"],
+        "away_goalie_team_adj_strength": away_goalie_strength["goalie_team_adj_strength"],
+        "diff_goalie_team_adj_strength": home_goalie_strength["goalie_team_adj_strength"] - away_goalie_strength["goalie_team_adj_strength"],
+    })
+
+    row.update({
+        "home_lineup_availability": home_lineup["lineup_availability"],
+        "away_lineup_availability": away_lineup["lineup_availability"],
+        "diff_lineup_availability": home_lineup["lineup_availability"] - away_lineup["lineup_availability"],
+        "home_top_skater_impact": home_lineup["top_skater_impact"],
+        "away_top_skater_impact": away_lineup["top_skater_impact"],
+        "diff_top_skater_impact": home_lineup["top_skater_impact"] - away_lineup["top_skater_impact"],
+        "home_deployment_concentration": home_lineup["deployment_concentration"],
+        "away_deployment_concentration": away_lineup["deployment_concentration"],
+        "diff_deployment_concentration": home_lineup["deployment_concentration"] - away_lineup["deployment_concentration"],
+    })
+
     # --- home/away split win% ---
     row.update({
         "home_home_win_pctg":  home_home_win_pctg,
@@ -679,6 +769,57 @@ def build_feature_row(
 
     home_adv = _advanced_as_of(ctx.advanced_df, home_team_id, as_of_date)
     away_adv = _advanced_as_of(ctx.advanced_df, away_team_id, as_of_date)
+    strength_state = ctx.strength_state()
+    home_team_strength = team_strength_as_of(
+        strength_state,
+        team_id=home_team_id,
+        season=season,
+        as_of_date=as_of_date,
+        is_home=True,
+        team_std=home_std,
+        team_adv=home_adv,
+    )
+    away_team_strength = team_strength_as_of(
+        strength_state,
+        team_id=away_team_id,
+        season=season,
+        as_of_date=as_of_date,
+        is_home=False,
+        team_std=away_std,
+        team_adv=away_adv,
+    )
+    home_goalie_strength = goalie_strength_as_of(
+        strength_state,
+        team_id=home_team_id,
+        season=season,
+        as_of_date=as_of_date,
+        team_def_strength=home_team_strength["team_def_strength"],
+        team_rest_days=home_rest,
+        game_id=game_id,
+        is_home=True,
+    )
+    away_goalie_strength = goalie_strength_as_of(
+        strength_state,
+        team_id=away_team_id,
+        season=season,
+        as_of_date=as_of_date,
+        team_def_strength=away_team_strength["team_def_strength"],
+        team_rest_days=away_rest,
+        game_id=game_id,
+        is_home=False,
+    )
+    home_lineup = lineup_context_as_of(
+        strength_state,
+        team_id=home_team_id,
+        season=season,
+        as_of_date=as_of_date,
+    )
+    away_lineup = lineup_context_as_of(
+        strength_state,
+        team_id=away_team_id,
+        season=season,
+        as_of_date=as_of_date,
+    )
 
     home_elo, away_elo = _elo_as_of(
         ctx.games, home_team_id, away_team_id, as_of_date, season
@@ -700,6 +841,12 @@ def build_feature_row(
         away_ts=away_ts,
         home_adv=home_adv,
         away_adv=away_adv,
+        home_team_strength=home_team_strength,
+        away_team_strength=away_team_strength,
+        home_goalie_strength=home_goalie_strength,
+        away_goalie_strength=away_goalie_strength,
+        home_lineup=home_lineup,
+        away_lineup=away_lineup,
         h2h_home_win_pctg=h2h,
         home_elo=home_elo,
         away_elo=away_elo,
@@ -803,6 +950,7 @@ def build_features_batch(
     # Build advanced lookup from the pre-loaded DataFrame (avoids re-fetching from
     # Supabase and uses the identical shift(1).rolling formula).
     advanced_lookup = _build_advanced_lookup_from_df(ctx.advanced_df)
+    strength_state = ctx.strength_state()
 
     # Elo always uses all completed games.
     elo_lookup = build_elo_lookup(ctx.games)
@@ -852,6 +1000,56 @@ def build_features_batch(
 
         home_adv = get_advanced_for_game(advanced_lookup, game["id"], game["home_team_id"])
         away_adv = get_advanced_for_game(advanced_lookup, game["id"], game["away_team_id"])
+        home_team_strength = team_strength_as_of(
+            strength_state,
+            team_id=game["home_team_id"],
+            season=game["season"],
+            as_of_date=game_date,
+            is_home=True,
+            team_std=home_std,
+            team_adv=home_adv,
+        )
+        away_team_strength = team_strength_as_of(
+            strength_state,
+            team_id=game["away_team_id"],
+            season=game["season"],
+            as_of_date=game_date,
+            is_home=False,
+            team_std=away_std,
+            team_adv=away_adv,
+        )
+        home_goalie_strength = goalie_strength_as_of(
+            strength_state,
+            team_id=game["home_team_id"],
+            season=game["season"],
+            as_of_date=game_date,
+            team_def_strength=home_team_strength["team_def_strength"],
+            team_rest_days=home_rest,
+            game_id=game["id"],
+            is_home=True,
+        )
+        away_goalie_strength = goalie_strength_as_of(
+            strength_state,
+            team_id=game["away_team_id"],
+            season=game["season"],
+            as_of_date=game_date,
+            team_def_strength=away_team_strength["team_def_strength"],
+            team_rest_days=away_rest,
+            game_id=game["id"],
+            is_home=False,
+        )
+        home_lineup = lineup_context_as_of(
+            strength_state,
+            team_id=game["home_team_id"],
+            season=game["season"],
+            as_of_date=game_date,
+        )
+        away_lineup = lineup_context_as_of(
+            strength_state,
+            team_id=game["away_team_id"],
+            season=game["season"],
+            as_of_date=game_date,
+        )
 
         elo = elo_lookup.get(game["id"], {})
         h2h_entry = h2h_lookup.get(game["id"], {})
@@ -871,6 +1069,12 @@ def build_features_batch(
             away_ts=away_ts,
             home_adv=home_adv,
             away_adv=away_adv,
+            home_team_strength=home_team_strength,
+            away_team_strength=away_team_strength,
+            home_goalie_strength=home_goalie_strength,
+            away_goalie_strength=away_goalie_strength,
+            home_lineup=home_lineup,
+            away_lineup=away_lineup,
             h2h_home_win_pctg=h2h_entry.get("h2h_home_win_pctg"),
             home_elo=elo.get("home_elo", STARTING_ELO),
             away_elo=elo.get("away_elo", STARTING_ELO),

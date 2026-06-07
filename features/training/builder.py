@@ -20,7 +20,7 @@ def _regular_contract(df):
 
 def build_features(use_materialized: bool = True):
     """
-    Build the regular-season training dataset (51 features + metadata).
+    Build the regular-season training dataset (current FEATURE_COLS + metadata).
 
     Loads all data from Supabase via DataContext.from_supabase() and delegates
     to build_features_batch(game_type=2).  Returns a DataFrame identical in

@@ -25,6 +25,18 @@ FEATURE_COLS = [
     "diff_cf_pct_5v5",   # 5v5 Corsi share
     "diff_xgf_pct_5v5",  # 5v5 Expected-goals share
     "diff_hdcf_pct_5v5", # 5v5 High-danger chance share
+    "home_team_off_strength", "away_team_off_strength", "diff_team_off_strength",
+    "home_team_def_strength", "away_team_def_strength", "diff_team_def_strength",
+    "home_team_schedule_strength", "away_team_schedule_strength", "diff_team_schedule_strength",
+    "home_team_split_strength", "away_team_split_strength", "diff_team_split_strength",
+    "home_team_form_blend", "away_team_form_blend", "diff_team_form_blend",
+    "home_goalie_talent_strength", "away_goalie_talent_strength", "diff_goalie_talent_strength",
+    "home_goalie_workload", "away_goalie_workload", "diff_goalie_workload",
+    "home_goalie_fatigue", "away_goalie_fatigue", "diff_goalie_fatigue",
+    "home_goalie_team_adj_strength", "away_goalie_team_adj_strength", "diff_goalie_team_adj_strength",
+    "home_lineup_availability", "away_lineup_availability", "diff_lineup_availability",
+    "home_top_skater_impact", "away_top_skater_impact", "diff_top_skater_impact",
+    "home_deployment_concentration", "away_deployment_concentration", "diff_deployment_concentration",
     "home_home_win_pctg", "away_road_win_pctg", "diff_home_road_pctg",
     "h2h_home_win_pctg", "home_elo", "away_elo", "elo_diff"
 ]
@@ -82,6 +94,19 @@ NEUTRAL_FILLS = {
     "home_l10_points": 0.0, "away_l10_points": 0.0,
     # elo
     "home_elo": 1500.0, "away_elo": 1500.0, "elo_diff": 0.0,
+    # centered strength / lineup ratings
+    "home_team_off_strength": 0.0, "away_team_off_strength": 0.0, "diff_team_off_strength": 0.0,
+    "home_team_def_strength": 0.0, "away_team_def_strength": 0.0, "diff_team_def_strength": 0.0,
+    "home_team_schedule_strength": 0.0, "away_team_schedule_strength": 0.0, "diff_team_schedule_strength": 0.0,
+    "home_team_split_strength": 0.0, "away_team_split_strength": 0.0, "diff_team_split_strength": 0.0,
+    "home_team_form_blend": 0.0, "away_team_form_blend": 0.0, "diff_team_form_blend": 0.0,
+    "home_goalie_talent_strength": 0.0, "away_goalie_talent_strength": 0.0, "diff_goalie_talent_strength": 0.0,
+    "home_goalie_workload": 0.0, "away_goalie_workload": 0.0, "diff_goalie_workload": 0.0,
+    "home_goalie_fatigue": 0.0, "away_goalie_fatigue": 0.0, "diff_goalie_fatigue": 0.0,
+    "home_goalie_team_adj_strength": 0.0, "away_goalie_team_adj_strength": 0.0, "diff_goalie_team_adj_strength": 0.0,
+    "home_lineup_availability": 0.0, "away_lineup_availability": 0.0, "diff_lineup_availability": 0.0,
+    "home_top_skater_impact": 0.0, "away_top_skater_impact": 0.0, "diff_top_skater_impact": 0.0,
+    "home_deployment_concentration": 0.0, "away_deployment_concentration": 0.0, "diff_deployment_concentration": 0.0,
 }
 
 

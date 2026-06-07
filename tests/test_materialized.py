@@ -123,6 +123,7 @@ def _ctx_with_playoffs(ctx):
         gsax_df=gsax_df,
         team_stats_df=team_stats_df,
         advanced_df=advanced_df,
+        skater_df=ctx.skater_df,
     )
 
 
@@ -182,6 +183,27 @@ def test_parse_empty_and_training_fallback(monkeypatch, ctx):
     assert set(df["game_id"]) == set(live["game_id"])
 
 
+def test_training_builder_reindexes_missing_strength_columns(monkeypatch, ctx):
+    live = build_features_batch(ctx, game_type=2)
+    legacy = live.drop(
+        columns=[
+            "home_team_off_strength",
+            "diff_goalie_talent_strength",
+            "home_lineup_availability",
+        ]
+    )
+
+    monkeypatch.setattr(training_builder, "get_materialized_game_features", lambda game_type=2: legacy)
+    df = training_builder.build_features(use_materialized=True)
+
+    assert "home_team_off_strength" in df.columns
+    assert "diff_goalie_talent_strength" in df.columns
+    assert "home_lineup_availability" in df.columns
+    assert df["home_team_off_strength"].isna().all()
+    assert df["diff_goalie_talent_strength"].isna().all()
+    assert df["home_lineup_availability"].isna().all()
+
+
 def test_build_form_snapshot_rows_returns_expected_snapshot_keys(ctx):
     materialized_rows = build_materialized_rows(ctx)
 
@@ -193,7 +215,22 @@ def test_build_form_snapshot_rows_returns_expected_snapshot_keys(ctx):
     assert goalie_rows
 
     team_row = team_rows[0]
-    assert {"team_id", "as_of_date", "pp_pctg"}.issubset(team_row)
+    assert {
+        "team_id",
+        "as_of_date",
+        "pp_pctg",
+        "team_off_strength",
+        "lineup_availability",
+        "deployment_concentration",
+    }.issubset(team_row)
+
+    goalie_row = goalie_rows[0]
+    assert {
+        "player_id",
+        "goalie_sv_pctg",
+        "goalie_talent_strength",
+        "goalie_team_adj_strength",
+    }.issubset(goalie_row)
 
 
 def test_clean_rows_normalizes_numpy_nan_and_dates():
