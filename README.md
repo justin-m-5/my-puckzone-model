@@ -22,20 +22,26 @@ cp .env.example .env   # add your SUPABASE_URL and SUPABASE_KEY
 ## Project structure
 
 ```
+conftest.py                  Root pytest conftest (mocks db for unit tests)
 db.py                        Supabase client + fetch helper
 
 features/
+  pipeline.py                ⭐ Unified, point-in-time-safe feature pipeline (v2.0)
+                               - DataContext  injectable data container (no live DB needed for tests)
+                               - build_feature_row()   single matchup, any as_of_date
+                               - build_features_batch()  efficient batch for training
   games.py                   Load completed games (reg season + playoffs)
   standings.py               Daily team standings snapshots
   goalies.py                 Goalie rolling save % (last 10 starts)
   team_stats.py              Team rolling efficiency stats (PP%, faceoff%, SOG...)
   elo.py                     Elo ratings updated game-by-game
+  advanced.py                Corsi / xG / high-danger shares (materialized table + fallback)
   players.py                 Per-player rolling stats for point prediction
   plays.py                   Shot events + xG feature builder
   playoffs.py                Playoff series context (wins, seeding) from Supabase
   training/
-    builder.py               Build regular season training dataset (51 features)
-    playoff_builder.py       Build playoff training dataset (51 + 4 series features)
+    builder.py               Regular-season training dataset (thin wrapper over pipeline)
+    playoff_builder.py       Playoff training dataset (thin wrapper + 4 series features)
 
 models/
   game.py                    Win model definition + FEATURE_COLS (51 features)
@@ -46,7 +52,7 @@ models/
 scripts/
   predict/
     run.py                   Interactive game predictor (main entry point)
-    builder.py               Assembles live features from Supabase for one game
+    builder.py               Assembles live features via unified pipeline for one game
     inputs.py                CLI prompts (team, date, game type)
     teams.py                 Team abbreviation → ID lookup
   train/
@@ -57,6 +63,54 @@ scripts/
     player.py                Train player_model.pkl
     xg.py                    Train xg_model.pkl
     compare.py               Compare win model variants side by side
+  backtest/
+    run.py                   ⭐ Walk-forward backtest harness (v2.0)
+    metrics.py               Shared evaluation metrics (log loss, Brier, AUC, calibration)
+
+tests/
+  conftest.py                In-memory DataContext fixtures (no Supabase required)
+  test_pipeline.py           Parity tests + leakage tests for the unified pipeline
+```
+
+---
+
+## Unified feature pipeline (v2.0)
+
+`features/pipeline.py` is the single entry point for all feature computation.
+All three callers — regular-season training, playoff training, and live serving —
+delegate to the same code, eliminating train/serve skew.
+
+```
+features/pipeline.py
+  └─ build_features_batch(ctx, game_type=2)   ← training (batch, efficient)
+  └─ build_feature_row(home, away, date, ctx) ← serving (single game, point-in-time)
+       │
+       ├─ features/training/builder.py          (wraps build_features_batch)
+       ├─ features/training/playoff_builder.py  (wraps build_features_batch + playoff cols)
+       └─ scripts/predict/builder.py            (wraps build_feature_row)
+```
+
+**Key guarantees**:
+- All features use `date < as_of_date` (strictly prior data only — no leakage).
+- Goalie rolling sv%/GSAx uses `shift(1).rolling(window)` in training and
+  equivalent `tail(window)` on `date < as_of_date`-filtered data in serving.
+- Advanced shot-share rolling uses the same shift(1)-equivalent logic in both paths.
+- Neutral fills (`NEUTRAL_FILLS` from `models/game.py`) applied identically everywhere.
+
+**Injectable DataContext** — pass an in-memory `DataContext` for unit testing:
+
+```python
+from features.pipeline import DataContext, build_feature_row
+
+ctx = DataContext(
+    games=my_games_df,
+    standings=my_standings_df,
+    goalie_df=my_goalie_df,
+    gsax_df=my_gsax_df,
+    team_stats_df=my_team_stats_df,
+    advanced_df=my_advanced_df,
+)
+row = build_feature_row(home_id, away_id, game_date, ctx)
 ```
 
 ---
@@ -86,7 +140,39 @@ You will be prompted for:
 3. Game date (defaults to today)
 4. Game type — `1` Regular Season or `2` Playoffs
 
-When **Playoffs** is selected the predictor automatically uses `playoff_model.pkl` for win probability and `playoff_score_model.pkl` for score prediction, both trained on playoff data only. Series wins, game number, and seeding are pulled live from Supabase and used as additional model features.
+---
+
+## Run the walk-forward backtest (v2.0)
+
+Evaluates the win model with a rolling-origin backtest (each season as its own
+test fold, trained on all prior seasons) instead of the single-season holdout.
+Reports accuracy, log loss, Brier score, and ROC AUC per fold and in aggregate.
+
+```bash
+PYTHONPATH=. python3 -m scripts.backtest.run
+
+# Options
+PYTHONPATH=. python3 -m scripts.backtest.run --model gradient_boosting
+PYTHONPATH=. python3 -m scripts.backtest.run --model logistic --no-calibrate
+PYTHONPATH=. python3 -m scripts.backtest.run --exclude-seasons 20202021
+PYTHONPATH=. python3 -m scripts.backtest.run --min-train-seasons 3
+```
+
+---
+
+## Run tests
+
+```bash
+PYTHONPATH=. python3 -m pytest tests/ -v
+```
+
+Tests run without a live Supabase connection (all data is injected via
+in-memory `DataContext` fixtures).  The test suite includes:
+
+- **Parity tests** — verify training path == serving path for all deterministic
+  features, proving train/serve skew is eliminated.
+- **Leakage tests** — verify that features at `as_of_date=D` do not change when
+  data dated `>= D` is added to the DataContext.
 
 ---
 

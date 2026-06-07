@@ -43,6 +43,9 @@ def build_h2h_lookup(games_df):
     """
     For each game, compute H2H record between the two teams
     from all prior meetings. Returns dict keyed by game_id.
+
+    NOTE: this is intentionally uncapped to match the historical
+    regular-season model training behavior.
     """
     games_df = games_df.sort_values("date").reset_index(drop=True)
     lookup = {}
@@ -53,7 +56,13 @@ def build_h2h_lookup(games_df):
         game_date = game["date"]
 
         # all prior meetings between these two teams (either direction)
-        prior = games_df[(games_df["date"] < game_date) & (((games_df["home_team_id"] == home_id) & (games_df["away_team_id"] == away_id)) | ((games_df["home_team_id"] == away_id) & (games_df["away_team_id"] == home_id)))].tail(10)  # last 10 meetings
+        prior = games_df[
+            (games_df["date"] < game_date)
+            & (
+                ((games_df["home_team_id"] == home_id) & (games_df["away_team_id"] == away_id))
+                | ((games_df["home_team_id"] == away_id) & (games_df["away_team_id"] == home_id))
+            )
+        ]
 
         if len(prior) == 0:
             lookup[game["id"]] = {
