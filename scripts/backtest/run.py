@@ -13,7 +13,7 @@ Usage
 
 Optional flags
 --------------
-  --model  {logistic,gradient_boosting,random_forest}
+  --model  {logistic,gradient_boosting,random_forest,goals}
                Which model to evaluate (default: logistic, the production default)
   --calibrate  Wrap the chosen model in isotonic calibration (default: True)
   --min-train-seasons  N   Skip folds with fewer than N training seasons (default: 2)
@@ -50,10 +50,13 @@ from sklearn.metrics import accuracy_score, classification_report
 
 from features.pipeline import DataContext, build_features_batch
 from models import FEATURE_COLS, fill_features
+from models.goals import BivariatePoissonGoalsModel
 from scripts.backtest.metrics import (
     compute_metrics,
+    exact_scoreline_hit,
     print_probability_metrics,
     print_feature_importance,
+    ranked_probability_score,
 )
 
 
@@ -118,6 +121,130 @@ def closing_line_value(fold_df: pd.DataFrame) -> None:
 # Walk-forward evaluator
 # ---------------------------------------------------------------------------
 
+def _run_goals_backtest(
+    *,
+    df: pd.DataFrame,
+    calibrate: bool,
+    min_train_seasons: int,
+):
+    if "home_score" not in df.columns or "away_score" not in df.columns:
+        print("ERROR: goals backtest requires home_score and away_score columns.")
+        return pd.DataFrame()
+
+    X_all = fill_features(df[FEATURE_COLS])
+    y_all = df["target"].values
+    seasons = sorted(df["season"].unique())
+
+    fold_results = []
+    all_goal_probs, all_win_probs, all_y = [], [], []
+    all_rps, all_exact = [], []
+
+    print("\n" + "=" * 88)
+    print(f"  {'Season':<12} {'Train':>7} {'Test':>6} {'GoalsAcc':>9} {'WinAcc':>8} "
+          f"{'GoalsLL':>9} {'WinLL':>8} {'RPS':>8} {'Exact':>8}")
+    print("-" * 88)
+
+    for i, test_season in enumerate(seasons):
+        train_seasons = seasons[:i]
+        if len(train_seasons) < min_train_seasons:
+            continue
+
+        train_mask = df["season"].isin(train_seasons)
+        test_mask = df["season"] == test_season
+
+        X_train = X_all[train_mask]
+        X_test = X_all[test_mask]
+        y_test = y_all[test_mask]
+        if len(X_test) == 0:
+            continue
+
+        # Goals model.
+        goals_model = BivariatePoissonGoalsModel(use_shared_lambda3=True)
+        goals_model.fit(
+            X_train,
+            df.loc[train_mask, "home_score"].values,
+            df.loc[train_mask, "away_score"].values,
+        )
+        goals_home_prob = goals_model.predict_home_win_prob(X_test, max_goals=10)
+        goals_metrics = compute_metrics(goals_home_prob, y_test)
+
+        score_mats = goals_model.predict_score_matrices(X_test, max_goals=10)
+        home_scores = df.loc[test_mask, "home_score"].astype(int).values
+        away_scores = df.loc[test_mask, "away_score"].astype(int).values
+        fold_rps = float(np.mean([ranked_probability_score(m, h, a) for m, h, a in zip(score_mats, home_scores, away_scores)]))
+        fold_exact = float(np.mean([exact_scoreline_hit(m, h, a) for m, h, a in zip(score_mats, home_scores, away_scores)]))
+
+        # Win-model benchmark (same folds).
+        win_model, needs_scale = _make_model("logistic", calibrate)
+        X_train_win = X_train.values
+        X_test_win = X_test.values
+        if needs_scale:
+            scaler = StandardScaler().fit(X_train_win)
+            X_train_win = scaler.transform(X_train_win)
+            X_test_win = scaler.transform(X_test_win)
+        win_model.fit(X_train_win, y_all[train_mask])
+        win_home_prob = win_model.predict_proba(X_test_win)[:, 1]
+        win_metrics = compute_metrics(win_home_prob, y_test)
+
+        fold_results.append({
+            "season": test_season,
+            "n_train": int(train_mask.sum()),
+            "n_test": int(test_mask.sum()),
+            "goals_accuracy": goals_metrics["accuracy"],
+            "win_accuracy": win_metrics["accuracy"],
+            "goals_log_loss": goals_metrics["log_loss"],
+            "win_log_loss": win_metrics["log_loss"],
+            "goals_rps": fold_rps,
+            "goals_exact_score_accuracy": fold_exact,
+        })
+
+        all_goal_probs.extend(goals_home_prob.tolist())
+        all_win_probs.extend(win_home_prob.tolist())
+        all_y.extend(y_test.tolist())
+        all_rps.append(fold_rps)
+        all_exact.append(fold_exact)
+
+        print(
+            f"  {test_season:<12} "
+            f"{int(train_mask.sum()):>7} "
+            f"{int(test_mask.sum()):>6} "
+            f"{goals_metrics['accuracy']:>9.3f} "
+            f"{win_metrics['accuracy']:>8.3f} "
+            f"{goals_metrics['log_loss']:>9.4f} "
+            f"{win_metrics['log_loss']:>8.4f} "
+            f"{fold_rps:>8.4f} "
+            f"{fold_exact:>8.4f}"
+        )
+
+    if not fold_results:
+        print("\nNo folds evaluated (not enough training seasons).")
+        return pd.DataFrame()
+
+    results_df = pd.DataFrame(fold_results)
+    agg_goals = compute_metrics(np.asarray(all_goal_probs), np.asarray(all_y))
+    agg_win = compute_metrics(np.asarray(all_win_probs), np.asarray(all_y))
+
+    print("-" * 88)
+    print(
+        f"  {'AGGREGATE':<12} "
+        f"{results_df['n_train'].sum():>7} "
+        f"{int(len(all_y)):>6} "
+        f"{agg_goals['accuracy']:>9.3f} "
+        f"{agg_win['accuracy']:>8.3f} "
+        f"{agg_goals['log_loss']:>9.4f} "
+        f"{agg_win['log_loss']:>8.4f} "
+        f"{np.mean(all_rps):>8.4f} "
+        f"{np.mean(all_exact):>8.4f}"
+    )
+    print("=" * 88)
+
+    print("\n--- Aggregate probabilistic metrics: goals model ---")
+    print_probability_metrics(np.asarray(all_goal_probs), np.asarray(all_y))
+    print("\n--- Aggregate probabilistic metrics: win model benchmark ---")
+    print_probability_metrics(np.asarray(all_win_probs), np.asarray(all_y))
+    return results_df
+
+
 def run_backtest(
     model_key: str = "logistic",
     calibrate: bool = True,
@@ -155,6 +282,20 @@ def run_backtest(
         return pd.DataFrame()
 
     df = df[~df["season"].isin(exclude_seasons)].copy()
+
+    if model_key == "goals":
+        score_cols = (
+            ctx.games[["id", "home_score", "away_score"]]
+            .rename(columns={"id": "game_id"})
+            .drop_duplicates("game_id")
+        )
+        df = df.merge(score_cols, on="game_id", how="left")
+        return _run_goals_backtest(
+            df=df,
+            calibrate=calibrate,
+            min_train_seasons=min_train_seasons,
+        )
+
     X_all = fill_features(df[FEATURE_COLS])
     y_all = df["target"].values
     seasons = sorted(df["season"].unique())
@@ -271,7 +412,7 @@ def _parse_args():
     )
     p.add_argument(
         "--model",
-        choices=list(_MODELS.keys()),
+        choices=list(_MODELS.keys()) + ["goals"],
         default="logistic",
         help="Model to evaluate (default: logistic).",
     )
