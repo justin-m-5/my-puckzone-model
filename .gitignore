@@ -18,6 +18,11 @@ __pycache__/
 *.pkl
 *.joblib
 
+# model artifact archive
+# Place superseded/legacy .pkl files under artifacts/archive/ for documentation.
+# They are excluded from version control the same as all *.pkl files above.
+artifacts/archive/
+
 # os
 .DS_Store
 Thumbs.db

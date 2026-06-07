@@ -132,25 +132,74 @@ row = build_feature_row(home_id, away_id, game_date, ctx)
 
 ## Saved models
 
-| File | Predicts | Trained on |
-|---|---|---|
-| `win_model.pkl` | Home/away win probability | Regular season games 2017-25 |
-| `playoff_model.pkl` | Home/away win probability | Playoff games 2018-25 + 4 series features |
-| `score_model.pkl` | Home score + away score | Regular season games 2017-25 |
-| `goals_model.pkl` | Full score distribution + derived win prob | Regular season games 2017-25 |
-| `playoff_score_model.pkl` | Home score + away score | Playoff games 2018-25 |
-| `player_model.pkl` | Will a player score a point? | Player-game rows 2017-25 |
-| `xg_model.pkl` | Will a shot result in a goal? | All shot events 2017-25 |
+### Artifact policy (Phase 2.4.3)
+
+| File | Policy | Role | Trained by |
+|---|---|---|---|
+| `xg_model.pkl` | **Required** | Expected-goals scorer; used by ingest + feature builders | `scripts.train.xg` |
+| `win_model.pkl` | **Required** | Regular-season win probability (`scripts.predict.run`) | `scripts.train.win` |
+| `goals_model.pkl` | **Required** | Bivariate Poisson goals model; primary serving path (`scripts.serve.run`) | `scripts.train.goals` |
+| `player_model.pkl` | Optional | Player point prediction; only needed for player-prop flows | `scripts.train.player` |
+| `score_model.pkl` | Legacy | Superseded by `goals_model.pkl`; still works as fallback in `scripts.predict.run` | `scripts.train.scores` |
+| `playoff_model.pkl` | Legacy | Superseded by goals-model playoff path; optional fallback in `scripts.predict.run` | `scripts.train.playoff` |
+| `playoff_score_model.pkl` | Legacy | Superseded by `goals_model.pkl`; optional fallback in `scripts.predict.run` | `scripts.train.playoff_scores` |
+
+**Required** artifacts must be present for runtime prediction and serving.
+**Optional** artifacts enable additional flows but are not required for the v2 core path.
+**Legacy** artifacts are preserved for backward compatibility; move them to `artifacts/archive/` once no longer needed.
+
+### Validate artifacts
+
+```bash
+PYTHONPATH=. python3 -m scripts.validate.artifacts
+```
+
+The validator exits `0` when all required artifacts are present and `1` when any are missing.
+Optional and legacy artifacts are reported as informational warnings.
+
+### Troubleshooting missing artifacts
+
+```
+ERROR: 'goals_model.pkl' not found.
+```
+→ Run the training sequence:
+```bash
+PYTHONPATH=. python3 -m scripts.train.xg
+PYTHONPATH=. python3 -m scripts.train.goals
+```
+
+```
+ERROR: 'win_model.pkl' not found.
+```
+→ Run:
+```bash
+PYTHONPATH=. python3 -m scripts.train.xg   # required prep step
+PYTHONPATH=. python3 -m scripts.train.win
+```
+
+For a full status check of all artifacts:
+```bash
+PYTHONPATH=. python3 -m scripts.validate.artifacts
+```
+
+### Archive convention
+
+Place superseded or retired `.pkl` files under `artifacts/archive/`.
+All `*.pkl` files (including those in `artifacts/archive/`) are excluded from
+version control via `.gitignore` — only the training scripts are committed.
 
 ---
 
 ## Current daily ops (recommended)
 
-Issue #6 roadmap status: **Phases 2.0–2.3 completed (June 7, 2026)**.
+Issue #6 roadmap status: **Phases 2.0–2.4 completed (June 7, 2026)**.
 
 Use this as the canonical daily sequence:
 
 ```bash
+# 0) Optional: verify required artifacts are present before starting
+PYTHONPATH=. python3 -m scripts.validate.artifacts
+
 # 1) Refresh materialized features (safe preview first)
 PYTHONPATH=. python3 -m scripts.materialize.run --dry-run
 PYTHONPATH=. python3 -m scripts.materialize.run
