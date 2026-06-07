@@ -274,3 +274,38 @@ goals model:
 PYTHONPATH=. python3 -m scripts.backtest.series
 PYTHONPATH=. python3 -m scripts.backtest.series --n-sims 50000 --seed 42
 ```
+
+---
+
+## xG v2 upgrade (Phase 2.2, PR 1/2)
+
+`features.plays.build_xg_features` now adds additive pre-shot context features:
+- Event-sequence context (`seconds_since_last_event`, `event_gap`, possession-change flags)
+- Rush/rebound/one-timer proxies
+- Strength + score state context (`is_5v5`, `strength_state_code`, `score_state`)
+- Location transforms and shot-lane/angle interaction bins
+
+Training command is unchanged:
+
+```bash
+PYTHONPATH=. python3 -m scripts.train.xg
+```
+
+`xg_model.pkl` now carries:
+- `feature_cols` (explicit schema used at train time)
+- `metrics` (`auc`, `log_loss`, `brier`, calibration bins)
+- `payload_version` (v2 payload marker)
+
+Compatibility notes:
+- Existing consumers remain supported; inference reindexes to payload `feature_cols`
+  and fills missing columns with neutral defaults (0.0).
+- If an older payload does not include `feature_cols`, inference falls back to
+  `models.xg.XG_FEATURE_COLS`.
+
+Data assumptions:
+- Required shot columns: `game_id`, `sort_order`, `type_desc_key`,
+  `event_owner_team_id`, `home_team_id`, `x_coord`, `y_coord`, `shot_type`,
+  `situation_code`, `period`.
+- Optional timing columns (`time_in_period`, `period_time`,
+  `time_in_period_seconds`) improve time-since-event context; when missing,
+  neutral sort-order-based defaults are used.

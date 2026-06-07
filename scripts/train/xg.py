@@ -10,7 +10,13 @@ Usage:
 
 import pickle
 from features.plays import get_shot_events, build_xg_features
-from models.xg import XG_FEATURE_COLS, get_xg_models, train_xg_model
+from models.xg import (
+    XG_FEATURE_COLS,
+    build_xg_feature_matrix,
+    calibration_bins,
+    get_xg_models,
+    train_xg_model,
+)
 
 
 def train():
@@ -24,7 +30,7 @@ def train():
     print(f"  {len(df)} shots with valid coordinates")
     print(f"  Goal rate: {df['is_goal'].mean():.3f}")
 
-    X = df[XG_FEATURE_COLS].fillna(0)
+    X = build_xg_feature_matrix(df, XG_FEATURE_COLS)
     y = df["is_goal"]
 
     test_mask = df["season"] == 20252026
@@ -39,6 +45,14 @@ def train():
         print(f"Training {name}...")
         result = train_xg_model(name, model_cfg, X_train, y_train, X_test, y_test)
         print(f"  AUC: {result['auc']:.4f}  Log Loss: {result['log_loss']:.4f}  Brier: {result['brier']:.4f}")
+        bins = calibration_bins(y_test, result["proba"])
+        if bins:
+            print("  Calibration bins (pred vs actual):")
+            for b in bins:
+                print(
+                    f"    {b['low']*100:>3.0f}-{b['high']*100:>3.0f}% "
+                    f"n={b['n']:>6} pred={b['pred_mean']*100:>5.1f}% actual={b['actual_rate']*100:>5.1f}%"
+                )
         if best_result is None or result["auc"] > best_result["auc"]:
             best_result = result
 
@@ -47,8 +61,15 @@ def train():
     payload = {
         "model": best_result["model"],
         "scaler": best_result["scaler"],
-        "feature_cols": XG_FEATURE_COLS,
+        "feature_cols": list(X.columns),
         "model_name": best_result["name"],
+        "payload_version": 2,
+        "metrics": {
+            "auc": float(best_result["auc"]),
+            "log_loss": float(best_result["log_loss"]),
+            "brier": float(best_result["brier"]),
+            "calibration_bins": calibration_bins(y_test, best_result["proba"]),
+        },
     }
     with open("xg_model.pkl", "wb") as f:
         pickle.dump(payload, f)

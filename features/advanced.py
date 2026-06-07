@@ -30,7 +30,7 @@ import pandas as pd
 from db import supabase, fetch_all
 from features.games import get_all_games
 from features.plays import build_xg_features
-from models.xg import XG_FEATURE_COLS
+from models.xg import XG_FEATURE_COLS, build_xg_feature_matrix
 
 SHOT_ATTEMPT_TYPES = ["goal", "shot-on-goal", "missed-shot", "blocked-shot"]
 UNBLOCKED_TYPES = ["goal", "shot-on-goal", "missed-shot"]
@@ -127,7 +127,8 @@ def build_advanced_team_games(games_df=None):
         sub = df[df["type_desc_key"].isin(SOG_GOAL_TYPES)].copy()
         if not sub.empty:
             feat = build_xg_features(sub)  # resets index; we merge back on keys
-            X = feat[XG_FEATURE_COLS].fillna(0)
+            feature_cols = xg_payload.get("feature_cols", XG_FEATURE_COLS)
+            X = build_xg_feature_matrix(feat, feature_cols)
             model, scaler = xg_payload["model"], xg_payload.get("scaler")
             X = scaler.transform(X) if scaler is not None else X
             feat = feat.assign(_xg=model.predict_proba(X)[:, 1])
