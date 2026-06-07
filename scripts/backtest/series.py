@@ -21,6 +21,11 @@ from models.series_sim import series_win_prob_from_lambdas, simulate_series
 from scripts.backtest.metrics import compute_metrics, print_probability_metrics
 
 
+def _series_rng(base_seed: int, season: int, team_a_id: int, team_b_id: int, tag: int = 0) -> np.random.Generator:
+    seq = np.random.SeedSequence([int(base_seed), int(season), int(team_a_id), int(team_b_id), int(tag)])
+    return np.random.default_rng(seq)
+
+
 def _completed_series(playoff_df: pd.DataFrame, games_df: pd.DataFrame) -> list[dict]:
     games = games_df.copy()
     if "game_type" in games.columns:
@@ -33,7 +38,10 @@ def _completed_series(playoff_df: pd.DataFrame, games_df: pd.DataFrame) -> list[
 
     first_rows = (
         playoff_df.sort_values(["season", "date", "game_id"])
-        .drop_duplicates(subset=["season", "home_team_id", "away_team_id", "series_game_number"], keep="first")
+        .drop_duplicates(
+            subset=["season", "home_team_id", "away_team_id", "series_game_number"],
+            keep="first",
+        )
     )
 
     out = []
@@ -71,8 +79,6 @@ def _completed_series(playoff_df: pd.DataFrame, games_df: pd.DataFrame) -> list[
 
         team_a_wins = wins[team_a]
         team_b_wins = wins[team_b]
-        if team_a_wins == team_b_wins:
-            continue
 
         out.append(
             {
@@ -188,7 +194,7 @@ def run_series_backtest(
             lambdas_a_home=(float(la_h[0]), float(la_a[0]), float(la3[0])),
             lambdas_b_home=(float(lb_h[0]), float(lb_a[0]), float(lb3[0])),
             n_sims=n_sims,
-            rng=np.random.default_rng(seed + season + int(s["team_a_id"]) + int(s["team_b_id"])),
+            rng=_series_rng(seed, season, int(s["team_a_id"]), int(s["team_b_id"]), tag=0),
             max_goals=max_goals,
         )
         prob_goals = float(sim_out["p_team_a_wins"])
@@ -210,7 +216,7 @@ def run_series_backtest(
                 simulate_series(
                     (float(p_home_a), float(p_home_b)),
                     n_sims=n_sims,
-                    rng=np.random.default_rng(seed + 10_000 + season + int(s["team_a_id"]) + int(s["team_b_id"])),
+                    rng=_series_rng(seed, season, int(s["team_a_id"]), int(s["team_b_id"]), tag=1),
                 )["p_team_a_wins"]
             )
 

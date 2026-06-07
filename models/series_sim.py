@@ -19,7 +19,10 @@ _DEFAULT_PATTERN = ("A", "A", "B", "B", "A", "B", "A")
 def _parse_home_ice_pattern(home_ice_pattern: str | Sequence[str]) -> tuple[str, ...]:
     if isinstance(home_ice_pattern, str):
         if home_ice_pattern != "2-2-1-1-1":
-            raise ValueError("Only '2-2-1-1-1' home-ice pattern is currently supported.")
+            raise ValueError(
+                "String home_ice_pattern must be '2-2-1-1-1'. "
+                "For custom patterns, pass a 7-item sequence of 'A'/'B'."
+            )
         return _DEFAULT_PATTERN
 
     pattern = tuple(str(x).upper() for x in home_ice_pattern)
