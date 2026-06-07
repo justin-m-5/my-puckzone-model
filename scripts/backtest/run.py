@@ -171,8 +171,12 @@ def _run_goals_backtest(
         score_mats = goals_model.predict_score_matrices(X_test, max_goals=10)
         home_scores = df.loc[test_mask, "home_score"].astype(int).values
         away_scores = df.loc[test_mask, "away_score"].astype(int).values
-        fold_rps = float(np.mean([ranked_probability_score(m, h, a) for m, h, a in zip(score_mats, home_scores, away_scores)]))
-        fold_exact = float(np.mean([exact_scoreline_hit(m, h, a) for m, h, a in zip(score_mats, home_scores, away_scores)]))
+        rps_vals, exact_vals = [], []
+        for m, h, a in zip(score_mats, home_scores, away_scores):
+            rps_vals.append(ranked_probability_score(m, h, a))
+            exact_vals.append(exact_scoreline_hit(m, h, a))
+        fold_rps = float(np.mean(rps_vals))
+        fold_exact = float(np.mean(exact_vals))
 
         # Win-model benchmark (same folds).
         win_model, needs_scale = _make_model("logistic", calibrate)

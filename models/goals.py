@@ -132,10 +132,12 @@ class BivariatePoissonGoalsModel:
     max_iter: int = 1000
 
     def fit(self, X, y_home, y_away) -> "BivariatePoissonGoalsModel":
+        y_home_arr = np.asarray(y_home)
+        y_away_arr = np.asarray(y_away)
         self.home_model_ = PoissonRegressor(alpha=self.alpha, max_iter=self.max_iter)
         self.away_model_ = PoissonRegressor(alpha=self.alpha, max_iter=self.max_iter)
-        self.home_model_.fit(X, y_home)
-        self.away_model_.fit(X, y_away)
+        self.home_model_.fit(X, y_home_arr)
+        self.away_model_.fit(X, y_away_arr)
 
         mu_home = np.clip(self.home_model_.predict(X), EPS, None)
         mu_away = np.clip(self.away_model_.predict(X), EPS, None)
@@ -143,7 +145,7 @@ class BivariatePoissonGoalsModel:
         if self.fixed_lambda3 is not None:
             self.lambda3_ = max(float(self.fixed_lambda3), 0.0)
         elif self.use_shared_lambda3:
-            cov = float(np.mean((np.asarray(y_home) - mu_home) * (np.asarray(y_away) - mu_away)))
+            cov = float(np.mean((y_home_arr - mu_home) * (y_away_arr - mu_away)))
             self.lambda3_ = max(cov, 0.0)
         else:
             self.lambda3_ = 0.0
