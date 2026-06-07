@@ -53,6 +53,7 @@ def build_benchmark_rows(
     game_rows = []
     y_true = []
     model_probs = []
+    y_true_with_close = []
     closing_probs = []
 
     for row in serving_rows:
@@ -73,6 +74,7 @@ def build_benchmark_rows(
             y_true.append(outcome_int)
             model_probs.append(model_prob)
             if closing_prob is not None:
+                y_true_with_close.append(outcome_int)
                 closing_probs.append(closing_prob)
 
         clv_log_edge = None
@@ -105,6 +107,7 @@ def build_benchmark_rows(
         df = pd.DataFrame(game_rows)
         first = serving_rows[0]
         date_val = first.get("date")
+        has_matching_closing_data = bool(y_true_with_close and len(y_true_with_close) == len(closing_probs))
         daily_rows.append(
             {
                 "date": date_val,
@@ -119,8 +122,8 @@ def build_benchmark_rows(
                 "mean_clv_log_edge": (None if df["clv_log_edge"].dropna().empty else float(df["clv_log_edge"].dropna().mean())),
                 "model_brier": _safe_brier(y_true, model_probs),
                 "model_log_loss": _safe_log_loss(y_true, model_probs),
-                "market_closing_brier": _safe_brier(y_true, closing_probs) if len(y_true) == len(closing_probs) and y_true else None,
-                "market_closing_log_loss": _safe_log_loss(y_true, closing_probs) if len(y_true) == len(closing_probs) and y_true else None,
+                "market_closing_brier": _safe_brier(y_true_with_close, closing_probs) if has_matching_closing_data else None,
+                "market_closing_log_loss": _safe_log_loss(y_true_with_close, closing_probs) if has_matching_closing_data else None,
                 "calibration_slices": calibration_slices(y_true, model_probs),
             }
         )

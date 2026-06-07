@@ -242,7 +242,7 @@ def run_single_date(
 
 def _parse_args():
     parser = argparse.ArgumentParser(description="Phase 2.3 daily serving + market benchmark orchestrator")
-    parser.add_argument("--date", type=_parse_date, default=datetime.date.today(), help="Target date (YYYY-MM-DD)")
+    parser.add_argument("--date", type=_parse_date, default=None, help="Target date (YYYY-MM-DD). Defaults to today.")
     parser.add_argument("--start-date", type=_parse_date, default=None, help="Backfill start date (YYYY-MM-DD)")
     parser.add_argument("--end-date", type=_parse_date, default=None, help="Backfill end date (YYYY-MM-DD)")
     parser.add_argument("--dry-run", action="store_true", help="Run full cascade without writing to DB")
@@ -256,7 +256,8 @@ def _parse_args():
 
 def main():
     args = _parse_args()
-    start_date = args.start_date or args.date
+    target_date = args.date or datetime.date.today()
+    start_date = args.start_date or target_date
     end_date = args.end_date or start_date
     dates = _date_range(start_date, end_date)
 
