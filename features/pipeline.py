@@ -196,12 +196,37 @@ def _as_date(val) -> datetime.date:
     return val
 
 
+def _resolve_goalie_override(
+    goalie_df: pd.DataFrame,
+    team_id: int,
+    as_of_date: datetime.date,
+    goalie_id: int | None,
+    label: str,
+) -> int | None:
+    """Validate optional goalie override against team context before as_of_date."""
+    if goalie_id is None:
+        return None
+    team_rows = goalie_df[
+        (goalie_df["team_id"] == team_id)
+        & (goalie_df["player_id"] == goalie_id)
+        & (goalie_df["date"] < as_of_date)
+    ]
+    if team_rows.empty:
+        print(
+            f"Warning: {label} goalie override {goalie_id} not found for team {team_id} "
+            "before game date; falling back to auto inference."
+        )
+        return None
+    return int(goalie_id)
+
+
 def _goalie_sv_as_of(
     goalie_df: pd.DataFrame,
     team_id: int,
     as_of_date: datetime.date,
     game_id=None,
     is_home=None,
+    player_id_override=None,
     window: int = _GOALIE_WINDOW,
 ):
     """
@@ -220,7 +245,9 @@ def _goalie_sv_as_of(
     if goalie_df.empty:
         return None
 
-    if game_id is not None:
+    if player_id_override is not None:
+        player_id = player_id_override
+    elif game_id is not None:
         # Training: look up the actual starter for this game.
         row = goalie_df[
             (goalie_df["game_id"] == game_id)
@@ -263,6 +290,7 @@ def _goalie_gsax_as_of(
     as_of_date: datetime.date,
     game_id=None,
     is_home=None,
+    player_id_override=None,
     window: int = _GOALIE_WINDOW,
 ):
     """
@@ -272,7 +300,9 @@ def _goalie_gsax_as_of(
     if gsax_df.empty or goalie_df.empty:
         return None
 
-    if game_id is not None:
+    if player_id_override is not None:
+        player_id = player_id_override
+    elif game_id is not None:
         row = goalie_df[
             (goalie_df["game_id"] == game_id)
             & (goalie_df["team_id"] == team_id)
@@ -708,6 +738,8 @@ def build_feature_row(
     ctx: DataContext,
     game_id=None,
     season: int = None,
+    home_goalie_id: int | None = None,
+    away_goalie_id: int | None = None,
     h2h_games_df: pd.DataFrame = None,
 ) -> dict:
     """
@@ -726,6 +758,8 @@ def build_feature_row(
                                    If None (serving mode), the most recent starter
                                    before as_of_date is used.
     season       : int | None     If None, inferred from as_of_date (Oct+ = season start).
+    home_goalie_id : int | None   Optional serving override for home starting goalie.
+    away_goalie_id : int | None   Optional serving override for away starting goalie.
     h2h_games_df : pd.DataFrame | None
                                    Optional games source for H2H calculation.
                                    If None, uses ctx.games.
@@ -748,17 +782,46 @@ def build_feature_row(
     if home_std["games_played"] == 0 and away_std["games_played"] == 0:
         return None
 
+    home_override = _resolve_goalie_override(
+        ctx.goalie_df, home_team_id, as_of_date, home_goalie_id, "home"
+    )
+    away_override = _resolve_goalie_override(
+        ctx.goalie_df, away_team_id, as_of_date, away_goalie_id, "away"
+    )
+
     home_sv = _goalie_sv_as_of(
-        ctx.goalie_df, home_team_id, as_of_date, game_id=game_id, is_home=True
+        ctx.goalie_df,
+        home_team_id,
+        as_of_date,
+        game_id=game_id,
+        is_home=True,
+        player_id_override=home_override,
     )
     away_sv = _goalie_sv_as_of(
-        ctx.goalie_df, away_team_id, as_of_date, game_id=game_id, is_home=False
+        ctx.goalie_df,
+        away_team_id,
+        as_of_date,
+        game_id=game_id,
+        is_home=False,
+        player_id_override=away_override,
     )
     home_gsax = _goalie_gsax_as_of(
-        ctx.gsax_df, ctx.goalie_df, home_team_id, as_of_date, game_id=game_id, is_home=True
+        ctx.gsax_df,
+        ctx.goalie_df,
+        home_team_id,
+        as_of_date,
+        game_id=game_id,
+        is_home=True,
+        player_id_override=home_override,
     )
     away_gsax = _goalie_gsax_as_of(
-        ctx.gsax_df, ctx.goalie_df, away_team_id, as_of_date, game_id=game_id, is_home=False
+        ctx.gsax_df,
+        ctx.goalie_df,
+        away_team_id,
+        as_of_date,
+        game_id=game_id,
+        is_home=False,
+        player_id_override=away_override,
     )
 
     home_rest = _rest_days_as_of(ctx.games, home_team_id, as_of_date)
@@ -797,6 +860,7 @@ def build_feature_row(
         team_rest_days=home_rest,
         game_id=game_id,
         is_home=True,
+        starter_player_id=home_override,
     )
     away_goalie_strength = goalie_strength_as_of(
         strength_state,
@@ -807,6 +871,7 @@ def build_feature_row(
         team_rest_days=away_rest,
         game_id=game_id,
         is_home=False,
+        starter_player_id=away_override,
     )
     home_lineup = lineup_context_as_of(
         strength_state,

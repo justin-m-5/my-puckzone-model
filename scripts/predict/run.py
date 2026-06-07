@@ -11,7 +11,12 @@ Usage:
 import pickle
 import pandas as pd
 from models import fill_features
-from scripts.predict.inputs import pick_team, get_game_date, get_game_type
+from scripts.predict.inputs import (
+    pick_team,
+    get_optional_goalie_id,
+    get_game_date,
+    get_game_type,
+)
 from scripts.predict.builder import build_prediction_row
 
 
@@ -51,7 +56,9 @@ def predict():
 
     # --- user input ---
     home_id, home_name, home_abbr = pick_team("home")
+    home_goalie_id = get_optional_goalie_id("home")
     away_id, away_name, away_abbr = pick_team("away")
+    away_goalie_id = get_optional_goalie_id("away")
     game_date = get_game_date()
     game_type_label, is_playoff = get_game_type()
 
@@ -79,7 +86,14 @@ def predict():
     score_payload = load_score_model("playoff_score_model.pkl" if is_playoff else "score_model.pkl")
 
     # --- build features ---
-    row, debug = build_prediction_row(home_id, away_id, game_date, is_playoff)
+    row, debug = build_prediction_row(
+        home_id,
+        away_id,
+        game_date,
+        is_playoff,
+        home_goalie_id=home_goalie_id,
+        away_goalie_id=away_goalie_id,
+    )
 
     X = fill_features(pd.DataFrame([row])[feature_cols])
     if scaler:
