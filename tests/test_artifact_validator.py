@@ -26,7 +26,7 @@ def _touch(directory: str, *names: str) -> None:
     """Create empty files with the given names inside *directory*."""
     for name in names:
         path = os.path.join(directory, name)
-        with open(path, "wb"):
+        with open(path, "wb") as f:
             pass
 
 

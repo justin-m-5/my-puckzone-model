@@ -124,7 +124,7 @@ def _print_report(result: dict, artifact_dir: str) -> None:
         if name in result["present_required"]:
             print(f"  ✓  {name}")
         else:
-            cmd = _REMEDIATION.get(name, f"PYTHONPATH=. python3 -m scripts.train.<script>")
+            cmd = _REMEDIATION.get(name, "see README.md for training instructions")
             print(f"  ✗  {name}  [MISSING]")
             print(f"       → Remediate: {cmd}")
 
