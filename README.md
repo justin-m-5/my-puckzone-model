@@ -1,5 +1,7 @@
 <!-- README.md -->
 
+![PuckZone logo](logo.png)
+
 # my-puckzone-model (v3.0)
 
 NHL analytics and prediction model built on historical game data spanning the 2017-18 through 2025-26 seasons.
