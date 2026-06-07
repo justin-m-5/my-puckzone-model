@@ -14,6 +14,11 @@ from features.pipeline import (
     _standings_as_of,
     _team_stats_as_of,
 )
+from features.strength import (
+    goalie_strength_as_of,
+    lineup_context_as_of,
+    team_strength_as_of,
+)
 from features.training.playoff_builder import attach_playoff_columns
 from models.game import FEATURE_COLS
 from models.playoff import PLAYOFF_EXTRA_COLS
@@ -133,6 +138,7 @@ def build_form_snapshot_rows(ctx: DataContext, materialized_rows: list[dict]):
         int(g["id"]): int(g["season"])
         for _, g in ctx.games.iterrows()
     }
+    strength_state = ctx.strength_state()
     team_snapshots = {}
     goalie_snapshots = {}
 
@@ -148,6 +154,21 @@ def build_form_snapshot_rows(ctx: DataContext, materialized_rows: list[dict]):
             std = {} if std_row is None else std_row
             team_stats = _team_stats_as_of(ctx.team_stats_df, team_id, as_of_date)
             advanced = _advanced_as_of(ctx.advanced_df, team_id, as_of_date)
+            strength = team_strength_as_of(
+                strength_state,
+                team_id=team_id,
+                season=season,
+                as_of_date=as_of_date,
+                is_home=(side == "home"),
+                team_std=std,
+                team_adv=advanced,
+            )
+            lineup = lineup_context_as_of(
+                strength_state,
+                team_id=team_id,
+                season=season,
+                as_of_date=as_of_date,
+            )
 
             team_snapshots[(team_id, as_of_date)] = {
                 "team_id": team_id,
@@ -169,18 +190,38 @@ def build_form_snapshot_rows(ctx: DataContext, materialized_rows: list[dict]):
                 "cf_pct_5v5": advanced.get("cf_pct_5v5"),
                 "xgf_pct_5v5": advanced.get("xgf_pct_5v5"),
                 "hdcf_pct_5v5": advanced.get("hdcf_pct_5v5"),
+                "team_off_strength": strength["team_off_strength"],
+                "team_def_strength": strength["team_def_strength"],
+                "team_schedule_strength": strength["team_schedule_strength"],
+                "team_split_strength": strength["team_split_strength"],
+                "team_form_blend": strength["team_form_blend"],
+                "lineup_availability": lineup["lineup_availability"],
+                "top_skater_impact": lineup["top_skater_impact"],
+                "deployment_concentration": lineup["deployment_concentration"],
                 "elo": elo_entry.get(f"{side}_elo"),
                 "feature_version": FEATURE_VERSION,
             }
 
             player_id = _latest_goalie_id_as_of(ctx, team_id, as_of_date)
             if player_id is not None:
+                goalie_strength = goalie_strength_as_of(
+                    strength_state,
+                    team_id=team_id,
+                    season=season,
+                    as_of_date=as_of_date,
+                    team_def_strength=strength["team_def_strength"],
+                    team_rest_days=None,
+                )
                 goalie_snapshots[(player_id, as_of_date)] = {
                     "player_id": player_id,
                     "team_id": team_id,
                     "as_of_date": as_of_date,
                     "goalie_sv_pctg": _goalie_sv_as_of(ctx.goalie_df, team_id, as_of_date),
                     "goalie_gsax": _goalie_gsax_as_of(ctx.gsax_df, ctx.goalie_df, team_id, as_of_date),
+                    "goalie_talent_strength": goalie_strength["goalie_talent_strength"],
+                    "goalie_workload": goalie_strength["goalie_workload"],
+                    "goalie_fatigue": goalie_strength["goalie_fatigue"],
+                    "goalie_team_adj_strength": goalie_strength["goalie_team_adj_strength"],
                     "feature_version": FEATURE_VERSION,
                 }
 

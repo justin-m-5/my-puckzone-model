@@ -23,12 +23,14 @@ TestLeakage
 """
 
 import math
+import pandas as pd
 import pytest
 
 from features.pipeline import (
     build_feature_row,
     build_features_batch,
 )
+from models.game import FEATURE_COLS
 from tests.conftest import (
     HOME_TEAM,
     AWAY_TEAM,
@@ -40,33 +42,8 @@ from tests.conftest import (
     SEASON,
 )
 
-# Columns we can check for exact parity between batch and point-in-time paths.
-# Goalie features may differ if the two paths select different players (e.g. a
-# mid-game goalie change not captured in fixtures), so we test them separately
-# with a looser check.
-_NON_GOALIE_FEATURE_COLS = [
-    "home_point_pctg", "away_point_pctg",
-    "home_win_pctg", "away_win_pctg",
-    "home_reg_win_pctg", "away_reg_win_pctg",
-    "home_goal_diff", "away_goal_diff",
-    "home_l10_points", "away_l10_points",
-    "home_rest_days", "away_rest_days",
-    "home_is_b2b", "away_is_b2b",
-    "rest_advantage",
-    "diff_point_pctg", "diff_goal_diff", "diff_l10_points",
-    "diff_pp_pctg", "diff_faceoff_pctg", "diff_sog",
-    "diff_cf_pct", "diff_xgf_pct", "diff_hdcf_pct",
-    "diff_cf_pct_5v5", "diff_xgf_pct_5v5", "diff_hdcf_pct_5v5",
-    "home_home_win_pctg", "away_road_win_pctg", "diff_home_road_pctg",
-    "h2h_home_win_pctg",
-    "home_elo", "away_elo", "elo_diff",
-]
-
-_GOALIE_FEATURE_COLS = [
-    "home_goalie_sv_pctg", "away_goalie_sv_pctg",
-    "home_goalie_gsax", "away_goalie_gsax",
-    "diff_goalie_sv_pctg", "diff_goalie_gsax",
-]
+_GOALIE_FEATURE_COLS = [col for col in FEATURE_COLS if "goalie" in col]
+_NON_GOALIE_FEATURE_COLS = [col for col in FEATURE_COLS if col not in _GOALIE_FEATURE_COLS]
 
 _TOLERANCE = 1e-9   # floating-point tolerance for exact-parity assertions
 
@@ -298,7 +275,7 @@ class TestLeakage:
 
         assert row_base is not None and row_future is not None
 
-        all_cols = _NON_GOALIE_FEATURE_COLS + _GOALIE_FEATURE_COLS
+        all_cols = FEATURE_COLS
         leaks = []
         for col in all_cols:
             if col not in row_base or col not in row_future:
@@ -331,7 +308,7 @@ class TestLeakage:
         b = row_base.iloc[0].to_dict()
         f = row_future.iloc[0].to_dict()
 
-        all_cols = _NON_GOALIE_FEATURE_COLS + _GOALIE_FEATURE_COLS
+        all_cols = FEATURE_COLS
         leaks = []
         for col in all_cols:
             if col not in b or col not in f:
@@ -377,3 +354,30 @@ class TestLeakage:
         assert _approx_eq(
             row_base["away_goalie_sv_pctg"], row_future["away_goalie_sv_pctg"]
         ), "Future goalie start leaked into away_goalie_sv_pctg"
+
+
+def test_lineup_features_fall_back_to_neutral_without_skater_history(ctx):
+    ctx_no_skaters = DataContext(
+        games=ctx.games,
+        standings=ctx.standings,
+        goalie_df=ctx.goalie_df,
+        gsax_df=ctx.gsax_df,
+        team_stats_df=ctx.team_stats_df,
+        advanced_df=ctx.advanced_df,
+        skater_df=pd.DataFrame(),
+    )
+
+    row = build_feature_row(
+        home_team_id=HOME_TEAM,
+        away_team_id=AWAY_TEAM,
+        as_of_date=TARGET_DATE,
+        ctx=ctx_no_skaters,
+        season=SEASON,
+    )
+
+    assert row is not None
+    assert row["home_lineup_availability"] == 0.0
+    assert row["away_lineup_availability"] == 0.0
+    assert row["diff_lineup_availability"] == 0.0
+    assert row["home_top_skater_impact"] == 0.0
+    assert row["home_deployment_concentration"] == 0.0

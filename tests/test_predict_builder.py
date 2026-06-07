@@ -16,6 +16,7 @@ def _ctx_with_games(ctx, games_df):
         gsax_df=ctx.gsax_df,
         team_stats_df=ctx.team_stats_df,
         advanced_df=ctx.advanced_df,
+        skater_df=ctx.skater_df,
     )
 
 

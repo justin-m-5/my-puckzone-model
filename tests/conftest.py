@@ -41,6 +41,12 @@ GOALIE_BY_TEAM = {
     ALT_AWAY_TEAM: GOALIE_ALT_AWAY,
 }
 
+SKATERS_BY_TEAM = {
+    HOME_TEAM: [101, 102, 103, 104, 105, 106, 107, 108],
+    AWAY_TEAM: [201, 202, 203, 204, 205, 206, 207, 208],
+    ALT_AWAY_TEAM: [301, 302, 303, 304, 305, 306, 307, 308],
+}
+
 
 # ---------------------------------------------------------------------------
 # Helper builders
@@ -241,6 +247,46 @@ def _make_advanced_df(games_df):
     return pd.DataFrame(rows)
 
 
+def _make_skater_df(games_df):
+    """Synthetic skater game log with recent-usage variation for lineup proxies."""
+    rows = []
+    ordered = games_df.sort_values("date").reset_index(drop=True)
+    positions = ["C", "L", "R", "D", "C", "L", "R", "D"]
+
+    for idx, g in ordered.iterrows():
+        game_idx = idx + 1
+        for team_id, is_home in [(int(g["home_team_id"]), True), (int(g["away_team_id"]), False)]:
+            for slot, player_id in enumerate(SKATERS_BY_TEAM[team_id], start=1):
+                if slot == 1 and (game_idx + team_id) % 6 == 0:
+                    continue
+                if slot == 8 and (game_idx + team_id) % 4 == 0:
+                    continue
+
+                toi_sec = max(720, 1320 - (slot * 55) + (game_idx % 3) * 10)
+                goals = 1 if slot <= 2 and (game_idx + slot + team_id) % 5 == 0 else 0
+                assists = 1 if slot <= 4 and (game_idx + slot + team_id) % 3 == 0 else 0
+                points = goals + assists
+                rows.append({
+                    "game_id": g["id"],
+                    "player_id": player_id,
+                    "team_id": team_id,
+                    "is_home": is_home,
+                    "position": positions[slot - 1],
+                    "toi_sec": toi_sec,
+                    "goals": goals,
+                    "assists": assists,
+                    "points": points,
+                    "sog": max(1, 5 - min(slot, 4) + (game_idx % 2)),
+                    "plus_minus": (1 if team_id == HOME_TEAM else -1 if slot >= 6 else 0),
+                    "hits": max(0, 2 + (slot % 3)),
+                    "blocked_shots": max(0, 1 + (slot % 2)),
+                    "date": g["date"],
+                    "season": g["season"],
+                })
+
+    return pd.DataFrame(rows)
+
+
 def _make_standings_df():
     """Daily standing snapshots for all fixture teams."""
     rows = []
@@ -295,6 +341,7 @@ def ctx(base_games):
     gsax_df = _make_gsax_df(base_games)
     team_stats_df = _make_team_stats_df(base_games)
     advanced_df = _make_advanced_df(base_games)
+    skater_df = _make_skater_df(base_games)
     standings = _make_standings_df()
 
     return DataContext(
@@ -304,6 +351,7 @@ def ctx(base_games):
         gsax_df=gsax_df,
         team_stats_df=team_stats_df,
         advanced_df=advanced_df,
+        skater_df=skater_df,
     )
 
 
@@ -329,6 +377,7 @@ def ctx_with_future(base_games):
     gsax_df = _make_gsax_df(all_games)
     team_stats_df = _make_team_stats_df(all_games)
     advanced_df = _make_advanced_df(all_games)
+    skater_df = _make_skater_df(all_games)
     standings = _make_standings_df()
 
     return DataContext(
@@ -338,4 +387,5 @@ def ctx_with_future(base_games):
         gsax_df=gsax_df,
         team_stats_df=team_stats_df,
         advanced_df=advanced_df,
+        skater_df=skater_df,
     )
