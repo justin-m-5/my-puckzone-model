@@ -1,6 +1,6 @@
 <!-- README.md -->
 
-# my-puckzone-model
+# my-puckzone-model (v3.0)
 
 NHL analytics and prediction model built on historical game data spanning the 2017-18 through 2025-26 seasons.
 
@@ -26,7 +26,7 @@ conftest.py                  Root pytest conftest (mocks db for unit tests)
 db.py                        Supabase client + fetch helper
 
 features/
-  pipeline.py                ⭐ Unified, point-in-time-safe feature pipeline (v2.0)
+  pipeline.py                ⭐ Unified, point-in-time-safe feature pipeline (v2.x foundation)
                                - DataContext  injectable data container (no live DB needed for tests)
                                - build_feature_row()   single matchup, any as_of_date
                                - build_features_batch()  efficient batch for training
@@ -56,7 +56,7 @@ scripts/
   materialize/
     run.py                   Materialize model feature store + form snapshots
   serve/
-    run.py                   Phase 2.3 daily orchestrator (predictions + market benchmarking)
+    run.py                   Phase 2.3+ daily orchestrator (predictions + market benchmarking)
     writer.py                App-serving + benchmark table writers (idempotent upserts)
     odds.py                  Odds provider adapter + implied probability normalization
     benchmark.py             Per-game + daily benchmark metrics vs market
@@ -75,7 +75,7 @@ scripts/
     xg.py                    Train xg_model.pkl
     compare.py               Compare win model variants side by side
   backtest/
-    run.py                   ⭐ Walk-forward backtest harness (v2.0)
+    run.py                   ⭐ Walk-forward backtest harness
     metrics.py               Shared evaluation metrics (log loss, Brier, AUC, calibration)
 
 tests/
@@ -86,7 +86,7 @@ tests/
 
 ---
 
-## Unified feature pipeline (v2.0)
+## Unified feature pipeline (v2.x foundation)
 
 `features/pipeline.py` is the single entry point for all feature computation.
 All three callers — regular-season training, playoff training, and live serving —
@@ -145,7 +145,7 @@ row = build_feature_row(home_id, away_id, game_date, ctx)
 | `playoff_score_model.pkl` | Legacy | Superseded by `goals_model.pkl`; optional fallback in `scripts.predict.run` | `scripts.train.playoff_scores` |
 
 **Required** artifacts must be present for runtime prediction and serving.
-**Optional** artifacts enable additional flows but are not required for the v2 core path.
+**Optional** artifacts enable additional flows but are not required for the current core path.
 **Legacy** artifacts are preserved for backward compatibility; move them to `artifacts/archive/` once no longer needed.
 
 ### Validate artifacts
@@ -190,9 +190,9 @@ version control via `.gitignore` — only the training scripts are committed.
 
 ---
 
-## Current daily ops (recommended)
+## Current daily ops (recommended, v3.0)
 
-Issue #6 roadmap status: **Phases 2.0–2.4 completed (June 7, 2026)**.
+Issue #6 roadmap status: **Phases 2.0–3.1 completed (June 7, 2026)**.
 
 Use this as the canonical daily sequence:
 
@@ -263,7 +263,7 @@ write without discarding the result.
 
 ---
 
-## Run the walk-forward backtest (v2.0)
+## Run the walk-forward backtest
 
 Evaluates the win model with a rolling-origin backtest (each season as its own
 test fold, trained on all prior seasons) instead of the single-season holdout.
