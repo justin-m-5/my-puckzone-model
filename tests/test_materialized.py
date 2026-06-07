@@ -1,4 +1,5 @@
 import datetime
+import json
 import numpy as np
 import pandas as pd
 
@@ -6,7 +7,7 @@ from features.materialized import parse_materialized_rows
 from features.pipeline import DataContext, build_features_batch
 from features.training import builder as training_builder
 from features.training import playoff_builder
-from scripts.materialize.run import build_materialized_rows
+from scripts.materialize.run import build_form_snapshot_rows, build_materialized_rows, _clean_rows
 from models.game import FEATURE_COLS
 from tests.conftest import HOME_TEAM, AWAY_TEAM, ALT_AWAY_TEAM
 
@@ -179,3 +180,39 @@ def test_parse_empty_and_training_fallback(monkeypatch, ctx):
     live = build_features_batch(ctx, game_type=2)
     assert len(df) == len(live)
     assert set(df["game_id"]) == set(live["game_id"])
+
+
+def test_build_form_snapshot_rows_returns_expected_snapshot_keys(ctx):
+    materialized_rows = build_materialized_rows(ctx)
+
+    team_rows, goalie_rows = build_form_snapshot_rows(ctx, materialized_rows)
+
+    assert isinstance(team_rows, list)
+    assert isinstance(goalie_rows, list)
+    assert team_rows
+    assert goalie_rows
+
+    team_row = team_rows[0]
+    assert {"team_id", "as_of_date", "pp_pctg"}.issubset(team_row)
+
+
+def test_clean_rows_normalizes_numpy_nan_and_dates():
+    cleaned = _clean_rows(
+        [
+            {
+                "int_value": np.int64(7),
+                "float_value": np.float64(1.25),
+                "nan_value": np.nan,
+                "date_value": datetime.date(2024, 1, 2),
+            }
+        ]
+    )
+
+    row = cleaned[0]
+    assert row == {
+        "int_value": 7,
+        "float_value": 1.25,
+        "nan_value": None,
+        "date_value": "2024-01-02",
+    }
+    assert json.dumps(row)
