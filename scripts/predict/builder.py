@@ -18,11 +18,10 @@ which uses the same shift(1)-equivalent filtering (date < as_of_date) as the
 training batch builder.
 """
 
-import datetime
-import pandas as pd
-
 from features.pipeline import DataContext, build_feature_row
 from features.playoffs import get_series_context
+
+REGULAR_SEASON_GAME_TYPE = 2
 
 
 def build_prediction_row(home_team_id, away_team_id, game_date, is_playoff):
@@ -56,6 +55,11 @@ def build_prediction_row(home_team_id, away_team_id, game_date, is_playoff):
         ctx=ctx,
         game_id=None,   # serving mode: use most recent starter, not actual starter
         season=season,
+        h2h_games_df=(
+            ctx.games[ctx.games["game_type"] == REGULAR_SEASON_GAME_TYPE]
+            if (not is_playoff and "game_type" in ctx.games.columns)
+            else ctx.games
+        ),
     )
 
     if row is None:
@@ -65,15 +69,65 @@ def build_prediction_row(home_team_id, away_team_id, game_date, is_playoff):
     # --- playoff series context (extra display info, not model features) ---
     series = None
     if is_playoff:
+        # Playoff bracket year is the season end year (e.g., 2023-24 -> 2024).
+        season_year = game_date.year if game_date.month >= 10 else game_date.year - 1
+        bracket_year = season_year + 1
+
+        series_games = ctx.games[
+            (ctx.games["date"] < game_date)
+            & (
+                ((ctx.games["home_team_id"] == home_team_id) & (ctx.games["away_team_id"] == away_team_id))
+                | ((ctx.games["home_team_id"] == away_team_id) & (ctx.games["away_team_id"] == home_team_id))
+            )
+            & ((ctx.games["game_type"] == 3) if "game_type" in ctx.games.columns else True)
+        ]
+        home_sw = int(sum(
+            1
+            for _, g in series_games.iterrows()
+            if (
+                (g["home_team_id"] == home_team_id and g["home_score"] > g["away_score"])
+                or (g["away_team_id"] == home_team_id and g["away_score"] > g["home_score"])
+            )
+        ))
+        away_sw = len(series_games) - home_sw
+
+        row["home_series_wins"] = home_sw
+        row["away_series_wins"] = away_sw
+        row["series_game_number"] = home_sw + away_sw + 1
+
         try:
-            series = get_series_context(home_team_id, away_team_id, game_date)
-        except Exception:
-            series = None
+            series_meta = get_series_context(home_team_id, away_team_id, bracket_year)
+        except Exception as exc:
+            print(f"Warning: unable to load series context: {exc}")
+            series_meta = None
+
+        row["seed_diff"] = (
+            (series_meta["team_a_seed"] - series_meta["team_b_seed"])
+            if (
+                series_meta
+                and series_meta.get("team_a_seed") is not None
+                and series_meta.get("team_b_seed") is not None
+            )
+            else 0
+        )
+        series = {
+            "round_number": series_meta["round_number"] if series_meta else None,
+            "series_title": series_meta["series_title"] if series_meta else None,
+            "series_abbrev": series_meta["series_abbrev"] if series_meta else None,
+            "team_a_wins": home_sw,
+            "team_b_wins": away_sw,
+            "team_a_seed": series_meta["team_a_seed"] if series_meta else None,
+            "team_b_seed": series_meta["team_b_seed"] if series_meta else None,
+            "series_clinched": series_meta["series_clinched"] if series_meta else False,
+            "series_winner_id": series_meta["series_winner_id"] if series_meta else None,
+        }
+    else:
+        row["home_series_wins"] = 0
+        row["away_series_wins"] = 0
+        row["series_game_number"] = 1
+        row["seed_diff"] = 0
 
     # --- debug / display values ---
-    home_std_gp = row.get("home_games_played", 0)
-    away_std_gp = row.get("away_games_played", 0)
-
     # Reconstruct standings-based record strings for display.
     # We don't store W/L/OTL directly in the feature row so pull from ctx.
     from features.standings import get_latest_standings_before

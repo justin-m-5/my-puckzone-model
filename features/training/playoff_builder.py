@@ -108,8 +108,6 @@ def build_playoff_features():
     # Attach playoff-specific columns.
     rows = []
     excluded_bubble = 0
-    skipped = 0
-
     for _, row in base_df.iterrows():
         game_id = row["game_id"]
         home_id = int(row["home_team_id"])
@@ -140,7 +138,6 @@ def build_playoff_features():
     df = pd.DataFrame(rows)
     print(
         f"  Built {len(df)} playoff feature rows "
-        f"(excluded {excluded_bubble} bubble play-in/round-robin, "
-        f"skipped {skipped} missing standings)"
+        f"(excluded {excluded_bubble} bubble play-in/round-robin)"
     )
     return df

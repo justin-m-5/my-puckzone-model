@@ -2,19 +2,9 @@
 """
 Shared pytest fixtures for the PuckZone model test suite.
 
-All fixtures provide in-memory DataContext objects so the pipeline can be
-tested without a live Supabase connection.  The data is small and synthetic
-but covers the structural patterns the pipeline exercises:
-
-  - Two teams (home=1, away=2) with enough prior history to satisfy rolling
-    window min_periods (3).
-  - Goalie stats keyed to the correct (game_id, player_id) pairs.
-  - Advanced share stats that differ between teams.
-  - Standing snapshots dated before the target game.
-
-Game IDs and dates are chosen so:
-  - Games 1..10 pre-date the "target" game (game_id=11, date=2024-01-15).
-  - Games 12+ post-date the target game and must NOT affect features.
+The fixture data intentionally varies game-to-game (goalie, team stats, and
+advanced metrics) so rolling windows and shift/off-by-one behavior are
+meaningfully tested.
 """
 
 import datetime
@@ -30,23 +20,44 @@ from features.pipeline import DataContext
 
 HOME_TEAM = 1
 AWAY_TEAM = 2
-GOALIE_HOME = 10   # player_id for the home team's starter
-GOALIE_AWAY = 20   # player_id for the away team's starter
-TARGET_GAME_ID = 11
+ALT_AWAY_TEAM = 3
+
+GOALIE_HOME = 10
+GOALIE_AWAY = 20
+GOALIE_ALT_AWAY = 30
+
+TARGET_GAME_ID = 13
 TARGET_DATE = datetime.date(2024, 1, 15)
-FUTURE_DATE = datetime.date(2024, 2, 1)
+
+ALT_TARGET_GAME_ID = 105
+ALT_TARGET_DATE = datetime.date(2024, 1, 12)
+
+POST_TARGET_DATE = datetime.date(2024, 2, 1)
 SEASON = 20232024
+
+GOALIE_BY_TEAM = {
+    HOME_TEAM: GOALIE_HOME,
+    AWAY_TEAM: GOALIE_AWAY,
+    ALT_AWAY_TEAM: GOALIE_ALT_AWAY,
+}
 
 
 # ---------------------------------------------------------------------------
 # Helper builders
 # ---------------------------------------------------------------------------
 
-def _make_games(n=10, start_date=datetime.date(2023, 10, 15)):
-    """Generate n completed games alternating home/away wins, plus the target."""
+def _make_games(start_date=datetime.date(2023, 10, 15)):
+    """Build synthetic schedule with varied prior-meeting counts."""
     rows = []
+
+    # 12 prior HOME vs AWAY meetings before TARGET_DATE.
+    # First 2 are away wins, next 10 are home wins. This intentionally creates
+    # a 10/12 uncapped H2H baseline that differs from a capped last-10 (1.0)
+    # baseline, so cap-vs-uncap regressions are detectable.
     d = start_date
-    for i in range(1, n + 1):
+    for i in range(1, 13):
+        home_score = 2 if i <= 2 else 4
+        away_score = 3 if i <= 2 else 2
         rows.append({
             "id": i,
             "season": SEASON,
@@ -54,12 +65,45 @@ def _make_games(n=10, start_date=datetime.date(2023, 10, 15)):
             "date": d,
             "home_team_id": HOME_TEAM,
             "away_team_id": AWAY_TEAM,
-            "home_score": 3,
-            "away_score": 2,
+            "home_score": home_score,
+            "away_score": away_score,
         })
-        d = d + datetime.timedelta(days=4)
+        d += datetime.timedelta(days=4)
 
-    # The target game (game 11) — on TARGET_DATE, result known for training tests
+    # 4 prior HOME vs ALT_AWAY meetings before ALT_TARGET_DATE.
+    for i, date in enumerate(
+        [
+            datetime.date(2024, 1, 1),
+            datetime.date(2024, 1, 4),
+            datetime.date(2024, 1, 7),
+            datetime.date(2024, 1, 10),
+        ],
+        start=1,
+    ):
+        rows.append({
+            "id": 100 + i,
+            "season": SEASON,
+            "game_type": 2,
+            "date": date,
+            "home_team_id": HOME_TEAM,
+            "away_team_id": ALT_AWAY_TEAM,
+            "home_score": 3 if i != 2 else 1,
+            "away_score": 1 if i != 2 else 2,
+        })
+
+    # Alternate target game (different prior-meeting count).
+    rows.append({
+        "id": ALT_TARGET_GAME_ID,
+        "season": SEASON,
+        "game_type": 2,
+        "date": ALT_TARGET_DATE,
+        "home_team_id": HOME_TEAM,
+        "away_team_id": ALT_AWAY_TEAM,
+        "home_score": 4,
+        "away_score": 2,
+    })
+
+    # Main target game.
     rows.append({
         "id": TARGET_GAME_ID,
         "season": SEASON,
@@ -70,141 +114,165 @@ def _make_games(n=10, start_date=datetime.date(2023, 10, 15)):
         "home_score": 4,
         "away_score": 1,
     })
+
     return pd.DataFrame(rows)
 
 
 def _make_goalie_df(games_df):
-    """One starter row per game for each team."""
+    """One starter row per team per game with varied saves/shots."""
     rows = []
-    for _, g in games_df.iterrows():
+    ordered = games_df.sort_values("date").reset_index(drop=True)
+    for idx, g in ordered.iterrows():
+        game_idx = idx + 1
+        home_team_id = int(g["home_team_id"])
+        away_team_id = int(g["away_team_id"])
         rows.append({
             "game_id": g["id"],
-            "player_id": GOALIE_HOME,
-            "team_id": HOME_TEAM,
+            "player_id": GOALIE_BY_TEAM[home_team_id],
+            "team_id": home_team_id,
             "is_home": True,
-            "saves": 28,
-            "shots_against": 30,
+            "saves": 24 + (game_idx % 7),
+            "shots_against": 29 + (game_idx % 4),
             "date": g["date"],
         })
         rows.append({
             "game_id": g["id"],
-            "player_id": GOALIE_AWAY,
-            "team_id": AWAY_TEAM,
+            "player_id": GOALIE_BY_TEAM[away_team_id],
+            "team_id": away_team_id,
             "is_home": False,
-            "saves": 25,
-            "shots_against": 30,
+            "saves": 23 + ((game_idx + away_team_id) % 6),
+            "shots_against": 28 + ((game_idx + away_team_id) % 5),
             "date": g["date"],
         })
     return pd.DataFrame(rows)
 
 
 def _make_gsax_df(games_df):
-    """GSAx entries keyed to game_id + player_id."""
+    """GSAx entries keyed to game_id + player_id with game-to-game variation."""
     rows = []
-    for _, g in games_df.iterrows():
-        rows.append({
-            "game_id": g["id"],
-            "player_id": GOALIE_HOME,
-            "team_id": HOME_TEAM,
-            "date": g["date"],
-            "gsax": 0.5,
-        })
-        rows.append({
-            "game_id": g["id"],
-            "player_id": GOALIE_AWAY,
-            "team_id": AWAY_TEAM,
-            "date": g["date"],
-            "gsax": -0.3,
-        })
+    ordered = games_df.sort_values("date").reset_index(drop=True)
+    for idx, g in ordered.iterrows():
+        game_idx = idx + 1
+        for team_id, is_home in [(int(g["home_team_id"]), True), (int(g["away_team_id"]), False)]:
+            base = 0.15 if team_id == HOME_TEAM else (-0.05 if team_id == AWAY_TEAM else -0.12)
+            trend = 0.03 * ((game_idx % 5) - 2)
+            rows.append({
+                "game_id": g["id"],
+                "player_id": GOALIE_BY_TEAM[team_id],
+                "team_id": team_id,
+                "date": g["date"],
+                "gsax": base + trend + (0.02 if is_home else -0.01),
+            })
     return pd.DataFrame(rows)
 
 
 def _make_team_stats_df(games_df):
-    """Simple team stats rows."""
+    """Team stats rows with varied values across games."""
     rows = []
-    for _, g in games_df.iterrows():
-        rows.append({
-            "game_id": g["id"],
-            "team_id": HOME_TEAM,
-            "is_home": True,
-            "date": g["date"],
-            "pp_pctg": 0.22,
-            "faceoff_winning_pctg": 0.51,
-            "sog": 32,
-            "hits": 22,
-            "blocked_shots": 14,
-        })
-        rows.append({
-            "game_id": g["id"],
-            "team_id": AWAY_TEAM,
-            "is_home": False,
-            "date": g["date"],
-            "pp_pctg": 0.18,
-            "faceoff_winning_pctg": 0.49,
-            "sog": 28,
-            "hits": 20,
-            "blocked_shots": 12,
-        })
+    ordered = games_df.sort_values("date").reset_index(drop=True)
+    for idx, g in ordered.iterrows():
+        game_idx = idx + 1
+        for team_id, is_home in [(int(g["home_team_id"]), True), (int(g["away_team_id"]), False)]:
+            if team_id == HOME_TEAM:
+                pp = 0.19 + 0.005 * (game_idx % 6)
+                fo = 0.49 + 0.004 * (game_idx % 5)
+                sog = 30 + (game_idx % 6)
+                hits = 18 + (game_idx % 7)
+                blocks = 11 + (game_idx % 5)
+            elif team_id == AWAY_TEAM:
+                pp = 0.16 + 0.006 * ((game_idx + 1) % 5)
+                fo = 0.47 + 0.003 * ((game_idx + 2) % 4)
+                sog = 27 + ((game_idx + 1) % 5)
+                hits = 19 + ((game_idx + 2) % 6)
+                blocks = 10 + ((game_idx + 1) % 4)
+            else:
+                pp = 0.17 + 0.004 * ((game_idx + 3) % 5)
+                fo = 0.48 + 0.003 * ((game_idx + 1) % 5)
+                sog = 28 + ((game_idx + 2) % 5)
+                hits = 17 + ((game_idx + 3) % 6)
+                blocks = 9 + ((game_idx + 2) % 4)
+
+            rows.append({
+                "game_id": g["id"],
+                "team_id": team_id,
+                "is_home": is_home,
+                "date": g["date"],
+                "pp_pctg": pp,
+                "faceoff_winning_pctg": fo,
+                "sog": sog,
+                "hits": hits,
+                "blocked_shots": blocks,
+            })
     return pd.DataFrame(rows)
 
 
 def _make_advanced_df(games_df):
-    """Advanced share stats per team per game."""
+    """Advanced share stats per team per game with varied values."""
     rows = []
-    for _, g in games_df.iterrows():
-        rows.append({
-            "game_id": g["id"],
-            "team_id": HOME_TEAM,
-            "season": SEASON,
-            "date": g["date"],
-            "cf_pct": 0.54,
-            "xgf_pct": 0.55,
-            "hdcf_pct": 0.53,
-            "cf_pct_5v5": 0.53,
-            "xgf_pct_5v5": 0.54,
-            "hdcf_pct_5v5": 0.52,
-        })
-        rows.append({
-            "game_id": g["id"],
-            "team_id": AWAY_TEAM,
-            "season": SEASON,
-            "date": g["date"],
-            "cf_pct": 0.46,
-            "xgf_pct": 0.45,
-            "hdcf_pct": 0.47,
-            "cf_pct_5v5": 0.47,
-            "xgf_pct_5v5": 0.46,
-            "hdcf_pct_5v5": 0.48,
-        })
+    ordered = games_df.sort_values("date").reset_index(drop=True)
+    for idx, g in ordered.iterrows():
+        game_idx = idx + 1
+        for team_id in [int(g["home_team_id"]), int(g["away_team_id"])]:
+            if team_id == HOME_TEAM:
+                cf = 0.50 + 0.008 * ((game_idx % 6) - 2)
+                xgf = 0.51 + 0.007 * ((game_idx % 5) - 2)
+                hdcf = 0.50 + 0.009 * ((game_idx % 4) - 1)
+            elif team_id == AWAY_TEAM:
+                cf = 0.47 + 0.006 * ((game_idx % 5) - 2)
+                xgf = 0.46 + 0.005 * ((game_idx % 4) - 1)
+                hdcf = 0.48 + 0.007 * ((game_idx % 6) - 3)
+            else:
+                cf = 0.49 + 0.005 * ((game_idx % 4) - 1)
+                xgf = 0.48 + 0.006 * ((game_idx % 6) - 2)
+                hdcf = 0.47 + 0.005 * ((game_idx % 5) - 2)
+
+            rows.append({
+                "game_id": g["id"],
+                "team_id": team_id,
+                "season": SEASON,
+                "date": g["date"],
+                "cf_pct": cf,
+                "xgf_pct": xgf,
+                "hdcf_pct": hdcf,
+                "cf_pct_5v5": cf - 0.01,
+                "xgf_pct_5v5": xgf - 0.01,
+                "hdcf_pct_5v5": hdcf - 0.01,
+            })
     return pd.DataFrame(rows)
 
 
 def _make_standings_df():
-    """Daily standing snapshots for both teams, spanning the season."""
+    """Daily standing snapshots for all fixture teams."""
     rows = []
     base = datetime.date(2023, 10, 14)
-    for i in range(100):
+    team_meta = {
+        HOME_TEAM: {"points": 62, "gf": 122, "ga": 101},
+        AWAY_TEAM: {"points": 54, "gf": 114, "ga": 117},
+        ALT_AWAY_TEAM: {"points": 50, "gf": 110, "ga": 116},
+    }
+
+    for i in range(120):
         d = base + datetime.timedelta(days=i)
-        for team, pts, gf, ga in [(HOME_TEAM, 60, 120, 100), (AWAY_TEAM, 50, 110, 115)]:
+        for team_id, meta in team_meta.items():
             rows.append({
-                "team_id": team,
+                "team_id": team_id,
                 "season_id": SEASON,
                 "as_of_date": d,
                 "games_played": max(i // 4, 1),
-                "point_pctg": 0.60 if team == HOME_TEAM else 0.50,
-                "win_pctg": 0.55 if team == HOME_TEAM else 0.45,
-                "regulation_win_pctg": 0.50 if team == HOME_TEAM else 0.40,
-                "goal_for": gf,
-                "goal_against": ga,
-                "goal_differential": gf - ga,
-                "l10_points": 12 if team == HOME_TEAM else 10,
-                "home_wins": 15 if team == HOME_TEAM else 12,
-                "home_losses": 8,
-                "road_wins": 12 if team == HOME_TEAM else 10,
-                "road_losses": 10,
-                "points": pts,
-                "wins": 30 if team == HOME_TEAM else 25,
-                "losses": 15,
+                "point_pctg": (meta["points"] / 100) + (0.001 * (i % 3)),
+                "win_pctg": 0.45 + (0.02 if team_id == HOME_TEAM else 0.0),
+                "regulation_win_pctg": 0.40 + (0.02 if team_id == HOME_TEAM else 0.0),
+                "goal_for": meta["gf"] + (i % 6),
+                "goal_against": meta["ga"] + (i % 5),
+                "goal_differential": (meta["gf"] - meta["ga"]) + ((i % 6) - (i % 5)),
+                "l10_points": 9 + (i % 5) + (1 if team_id == HOME_TEAM else 0),
+                "home_wins": 14 + (1 if team_id == HOME_TEAM else 0),
+                "home_losses": 8 + (0 if team_id == HOME_TEAM else 1),
+                "road_wins": 11 + (1 if team_id == HOME_TEAM else 0),
+                "road_losses": 10 + (0 if team_id == HOME_TEAM else 1),
+                "points": meta["points"] + (i % 6),
+                "wins": 28 + (2 if team_id == HOME_TEAM else 0),
+                "losses": 16 + (0 if team_id == HOME_TEAM else 1),
                 "ot_losses": 5,
             })
     return pd.DataFrame(rows)
@@ -216,8 +284,8 @@ def _make_standings_df():
 
 @pytest.fixture
 def base_games():
-    """Ten historical games + the target game (game 11)."""
-    return _make_games(n=10)
+    """Synthetic completed regular-season games with two target matchups."""
+    return _make_games()
 
 
 @pytest.fixture
@@ -249,7 +317,7 @@ def ctx_with_future(base_games):
         "id": 100,
         "season": SEASON,
         "game_type": 2,
-        "date": FUTURE_DATE,
+        "date": POST_TARGET_DATE,
         "home_team_id": HOME_TEAM,
         "away_team_id": AWAY_TEAM,
         "home_score": 5,

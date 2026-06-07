@@ -23,20 +23,20 @@ TestLeakage
 """
 
 import math
-import datetime
 import pytest
-import pandas as pd
 
 from features.pipeline import (
-    DataContext,
     build_feature_row,
     build_features_batch,
 )
 from tests.conftest import (
     HOME_TEAM,
     AWAY_TEAM,
+    ALT_AWAY_TEAM,
     TARGET_GAME_ID,
     TARGET_DATE,
+    ALT_TARGET_GAME_ID,
+    ALT_TARGET_DATE,
     SEASON,
 )
 
@@ -58,6 +58,7 @@ _NON_GOALIE_FEATURE_COLS = [
     "diff_cf_pct", "diff_xgf_pct", "diff_hdcf_pct",
     "diff_cf_pct_5v5", "diff_xgf_pct_5v5", "diff_hdcf_pct_5v5",
     "home_home_win_pctg", "away_road_win_pctg", "diff_home_road_pctg",
+    "h2h_home_win_pctg",
     "home_elo", "away_elo", "elo_diff",
 ]
 
@@ -204,10 +205,20 @@ class TestParity:
     def test_advanced_rolling_uses_prior_games_only(self, ctx):
         """
         The advanced rolling window at TARGET_DATE must equal the mean of
-        games 1..10 (all prior games), not include game 11 (TARGET_DATE).
+        all prior games, not include TARGET_DATE itself.
         """
-        # From conftest: HOME_TEAM always has cf_pct=0.54 for all 10 prior games.
-        # Rolling mean of 10 values all equal to 0.54 = 0.54.
+        prior = ctx.advanced_df[
+            (ctx.advanced_df["team_id"] == HOME_TEAM)
+            & (ctx.advanced_df["date"] < TARGET_DATE)
+        ].sort_values("date")
+        expected_home = prior.tail(10)["cf_pct"].mean()
+
+        prior_away = ctx.advanced_df[
+            (ctx.advanced_df["team_id"] == AWAY_TEAM)
+            & (ctx.advanced_df["date"] < TARGET_DATE)
+        ].sort_values("date")
+        expected_away = prior_away.tail(10)["cf_pct"].mean()
+
         pit = build_feature_row(
             home_team_id=HOME_TEAM,
             away_team_id=AWAY_TEAM,
@@ -216,8 +227,7 @@ class TestParity:
             season=SEASON,
         )
         assert pit is not None
-        # diff_cf_pct = home 0.54 - away 0.46 = 0.08
-        expected_diff = 0.54 - 0.46
+        expected_diff = expected_home - expected_away
         assert abs(pit["diff_cf_pct"] - expected_diff) < 1e-6, (
             f"Expected diff_cf_pct ≈ {expected_diff:.3f}, got {pit['diff_cf_pct']!r}"
         )
@@ -225,8 +235,8 @@ class TestParity:
     def test_h2h_uses_prior_games_only(self, ctx):
         """
         H2H percentage at TARGET_DATE should be based on games before that date.
-        All 10 prior games were won by HOME_TEAM (home_score=3, away_score=2),
-        so h2h_home_win_pctg should be 1.0.
+        The fixture has 12 prior HOME vs AWAY games with 10 home wins, so
+        uncapped H2H should be 10 / 12 (not capped to last 10 = 1.0).
         """
         pit = build_feature_row(
             home_team_id=HOME_TEAM,
@@ -236,8 +246,24 @@ class TestParity:
             season=SEASON,
         )
         assert pit is not None
-        # 10 prior meetings, all home wins → 1.0 (capped at last 10)
-        assert pit["h2h_home_win_pctg"] == pytest.approx(1.0)
+        assert pit["h2h_home_win_pctg"] == pytest.approx(10 / 12)
+
+    def test_h2h_fixture_has_different_prior_meeting_counts(self, ctx):
+        """
+        Secondary fixture matchup has fewer priors (HOME vs ALT_AWAY), ensuring
+        H2H behavior is tested across unequal prior-meeting counts.
+        """
+        pit = build_feature_row(
+            home_team_id=HOME_TEAM,
+            away_team_id=ALT_AWAY_TEAM,
+            as_of_date=ALT_TARGET_DATE,
+            ctx=ctx,
+            game_id=ALT_TARGET_GAME_ID,
+            season=SEASON,
+        )
+        assert pit is not None
+        # 4 prior meetings before ALT_TARGET_DATE; home won 3.
+        assert pit["h2h_home_win_pctg"] == pytest.approx(0.75)
 
 
 # ---------------------------------------------------------------------------

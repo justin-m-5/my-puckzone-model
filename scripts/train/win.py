@@ -17,7 +17,6 @@ Two experiments are wired in (toggle the flags below):
 """
 
 import pickle
-import numpy as np
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
 from sklearn.calibration import CalibratedClassifierCV
