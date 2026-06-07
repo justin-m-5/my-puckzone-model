@@ -229,6 +229,7 @@ Quick runbook:
 
 ```bash
 PYTHONPATH=. python3 -m scripts.predict.run
+PYTHONPATH=. python3 -m scripts.predict.run --game-id 2026020001
 ```
 
 You will be prompted for:
@@ -238,6 +239,27 @@ You will be prompted for:
 4. Away team starting goalie id (optional, press Enter for auto-selection)
 5. Game date (defaults to today)
 6. Game type — `1` Regular Season or `2` Playoffs
+
+`--game-id` uses `public.games` as the source of truth for:
+- `id` → `game_id`
+- `date` → prediction date
+- `game_type`
+- `home_team_id`
+- `away_team_id`
+
+In `--game-id` mode the CLI still prints the same prediction output, then upserts
+the result to `public.game_predictions`. The Phase 3.1 schema file for that
+table lives at `migrations/20260607_phase_3_1_game_predictions.sql`.
+
+After loading the game row, the CLI prompts for optional home/away goalie ids:
+- press Enter to keep the existing auto-inference behavior
+- enter a numeric id to force an override
+- enter invalid text to get a warning and safely fall back to auto-inference
+
+If a `game_id` is missing from `public.games`, the command prints a friendly
+error and exits non-zero. If prediction persistence fails, the CLI still prints
+the prediction output and then warns about the failed `public.game_predictions`
+write without discarding the result.
 
 ---
 

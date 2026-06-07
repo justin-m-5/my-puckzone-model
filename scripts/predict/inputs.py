@@ -18,7 +18,7 @@ def pick_team(label):
         print(f"  '{abbr}' not found. Try again.")
 
 
-def get_optional_goalie_id(label):
+def get_optional_goalie_id(label, retry_on_invalid=True):
     """Ask for an optional starting goalie player id."""
     while True:
         raw = input(
@@ -29,7 +29,11 @@ def get_optional_goalie_id(label):
         try:
             return int(raw)
         except ValueError:
-            print(f"  Warning: '{raw}' is not numeric. Please enter a numeric id or press Enter.")
+            if retry_on_invalid:
+                print(f"  Warning: '{raw}' is not numeric. Please enter a numeric id or press Enter.")
+                continue
+            print(f"  Warning: '{raw}' is not numeric; falling back to auto inference.")
+            return None
 
 
 def get_game_date():
