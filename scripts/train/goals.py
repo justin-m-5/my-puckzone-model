@@ -8,6 +8,7 @@ Usage:
 
 import pickle
 import pandas as pd
+from sklearn.preprocessing import StandardScaler
 
 from db import supabase, fetch_all
 from features.training import build_features
@@ -38,10 +39,14 @@ def train():
 
     print(f"Train: {len(X_train)} rows | Test: {len(X_test)} rows")
 
-    model = BivariatePoissonGoalsModel(use_shared_lambda3=True)
-    model.fit(X_train, y_home_train, y_away_train)
+    scaler = StandardScaler().fit(X_train)
+    X_tr = scaler.transform(X_train)
+    X_te = scaler.transform(X_test)
 
-    home_rate, away_rate, _ = model.predict_rates(X_test)
+    model = BivariatePoissonGoalsModel(use_shared_lambda3=True)
+    model.fit(X_tr, y_home_train, y_away_train)
+
+    home_rate, away_rate, _ = model.predict_rates(X_te)
     print("\nDiagnostics (test split):")
     print(f"  Mean home goals  — actual: {y_home_test.mean():.3f} | predicted: {home_rate.mean():.3f}")
     print(f"  Mean away goals  — actual: {y_away_test.mean():.3f} | predicted: {away_rate.mean():.3f}")
@@ -49,8 +54,11 @@ def train():
 
     payload = {
         "model": model,
+        "scaler": scaler,
         "feature_cols": FEATURE_COLS,
         "model_name": "Bivariate Poisson goals model",
+        "model_version": "phase-2.4.1",
+        "payload_version": "2.4.1",
         "lambda3": model.lambda3_,
         "tie_rule": OT_TIE_RULE,
     }

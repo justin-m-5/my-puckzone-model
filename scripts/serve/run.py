@@ -109,6 +109,7 @@ def generate_serving_rows(
         return []
 
     model = goals_payload["model"]
+    scaler = goals_payload.get("scaler")
     feature_cols = goals_payload["feature_cols"]
 
     rows = []
@@ -118,6 +119,8 @@ def generate_serving_rows(
             continue
 
         X = fill_features(pd.DataFrame([feature_row])[feature_cols])
+        if scaler is not None:
+            X = scaler.transform(X)
         home_rate, away_rate, lambda3_arr = model.predict_rates(X)
         lambda_home = float(home_rate[0])
         lambda_away = float(away_rate[0])

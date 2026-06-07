@@ -129,7 +129,7 @@ class BivariatePoissonGoalsModel:
     use_shared_lambda3: bool = True
     fixed_lambda3: float | None = None
     alpha: float = 1e-4
-    max_iter: int = 1000
+    max_iter: int = 5000
 
     def fit(self, X, y_home, y_away) -> "BivariatePoissonGoalsModel":
         y_home_arr = np.asarray(y_home)
