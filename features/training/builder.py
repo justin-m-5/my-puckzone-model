@@ -9,9 +9,16 @@ for backward compatibility: everything that imports
 """
 
 from features.pipeline import DataContext, build_features_batch
+from features.materialized import get_materialized_game_features
+from models.game import FEATURE_COLS
 
 
-def build_features():
+def _regular_contract(df):
+    cols = ["game_id", "season", "date", "home_team_id", "away_team_id"] + FEATURE_COLS + ["target"]
+    return df.reindex(columns=cols)
+
+
+def build_features(use_materialized: bool = True):
     """
     Build the regular-season training dataset (51 features + metadata).
 
@@ -19,6 +26,12 @@ def build_features():
     to build_features_batch(game_type=2).  Returns a DataFrame identical in
     schema to the v1.x output.
     """
+    if use_materialized:
+        materialized_df = get_materialized_game_features(game_type=2)
+        if not materialized_df.empty:
+            print(f"Using materialized regular-season feature store ({len(materialized_df)} rows)")
+            return _regular_contract(materialized_df)
+
     ctx = DataContext.from_supabase()
     print("Building regular-season features (game_type=2)...")
-    return build_features_batch(ctx, game_type=2)
+    return _regular_contract(build_features_batch(ctx, game_type=2))

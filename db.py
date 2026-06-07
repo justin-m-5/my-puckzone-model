@@ -24,3 +24,11 @@ def fetch_all(table, query):
             break
         offset += page_size
     return all_rows
+
+
+def upsert_rows(table, rows, on_conflict=None):
+    """Upsert rows into a Supabase table."""
+    if not rows:
+        return None
+    query = supabase.table(table).upsert(rows, on_conflict=on_conflict)
+    return query.execute()

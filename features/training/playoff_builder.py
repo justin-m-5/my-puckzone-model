@@ -17,6 +17,8 @@ for backward compatibility: everything that imports
 import pandas as pd
 from db import supabase, fetch_all
 from features.pipeline import DataContext, build_features_batch
+from features.materialized import get_materialized_game_features
+from models.playoff import PLAYOFF_FEATURE_COLS
 
 
 def _get_seeds_lookup():
@@ -73,23 +75,15 @@ def _build_series_state_lookup(playoff_games):
     return lookup
 
 
-def build_playoff_features():
-    """
-    Build the playoff training dataset: 51 base features + 4 playoff-specific
-    columns (series_game_number, home_series_wins, away_series_wins, seed_diff).
-    """
-    ctx = DataContext.from_supabase()
-
-    # Filter to playoff games only.
-    all_games = ctx.games
-    playoff_games = all_games[all_games["game_type"] == 3].copy()
-    print(f"  {len(playoff_games)} playoff games found")
-
-    if playoff_games.empty:
-        print("ERROR: No playoff games found. Check game_type=3 rows exist in Supabase.")
+def attach_playoff_columns(base_df: pd.DataFrame, ctx: DataContext) -> pd.DataFrame:
+    """Attach playoff-specific columns and exclude bubble play-in/round-robin rows."""
+    if base_df.empty:
         return pd.DataFrame()
 
-    # Load playoff-specific lookups.
+    playoff_games = ctx.games
+    if "game_type" in playoff_games.columns:
+        playoff_games = playoff_games[playoff_games["game_type"] == 3].copy()
+
     print("Loading playoff series seeds and rounds...")
     seeds_lookup = _get_seeds_lookup()
     round_lookup = _get_series_round_lookup()
@@ -98,14 +92,6 @@ def build_playoff_features():
     def bracket_year(season):
         return int(str(season)[4:])
 
-    # Build base features for all playoff games using the unified pipeline.
-    print("Building base features (via unified pipeline)...")
-    base_df = build_features_batch(ctx, game_type=3)
-
-    if base_df.empty:
-        return pd.DataFrame()
-
-    # Attach playoff-specific columns.
     rows = []
     excluded_bubble = 0
     for _, row in base_df.iterrows():
@@ -141,3 +127,34 @@ def build_playoff_features():
         f"(excluded {excluded_bubble} bubble play-in/round-robin)"
     )
     return df
+
+
+def _playoff_contract(df: pd.DataFrame) -> pd.DataFrame:
+    cols = ["game_id", "season", "date", "home_team_id", "away_team_id"] + PLAYOFF_FEATURE_COLS + ["target"]
+    return df.reindex(columns=cols)
+
+
+def build_playoff_features(use_materialized: bool = True):
+    """
+    Build the playoff training dataset: 51 base features + 4 playoff-specific
+    columns (series_game_number, home_series_wins, away_series_wins, seed_diff).
+    """
+    if use_materialized:
+        materialized_df = get_materialized_game_features(game_type=3)
+        if not materialized_df.empty:
+            print(f"Using materialized playoff feature store ({len(materialized_df)} rows)")
+            return _playoff_contract(materialized_df)
+
+    ctx = DataContext.from_supabase()
+
+    all_games = ctx.games
+    playoff_games = all_games[all_games["game_type"] == 3].copy()
+    print(f"  {len(playoff_games)} playoff games found")
+
+    if playoff_games.empty:
+        print("ERROR: No playoff games found. Check game_type=3 rows exist in Supabase.")
+        return pd.DataFrame()
+
+    print("Building base features (via unified pipeline)...")
+    base_df = build_features_batch(ctx, game_type=3)
+    return _playoff_contract(attach_playoff_columns(base_df, ctx))
