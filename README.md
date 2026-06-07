@@ -46,6 +46,7 @@ features/
 
 models/
   game.py                    Win model definition + FEATURE_COLS (51 features)
+  goals.py                   Bivariate Poisson goals model (Phase 2.1)
   playoff.py                 Playoff win model + PLAYOFF_FEATURE_COLS (55 features)
   player.py                  Player point prediction model
   xg.py                      Expected goals model
@@ -61,6 +62,7 @@ scripts/
   train/
     win.py                   Train win_model.pkl (regular season)
     playoff.py               Train playoff_model.pkl
+    goals.py                 Train goals_model.pkl (bivariate Poisson)
     scores.py                Train score_model.pkl (regular season)
     playoff_scores.py        Train playoff_score_model.pkl
     player.py                Train player_model.pkl
@@ -126,6 +128,7 @@ row = build_feature_row(home_id, away_id, game_date, ctx)
 | `win_model.pkl` | Home/away win probability | Regular season games 2017-25 |
 | `playoff_model.pkl` | Home/away win probability | Playoff games 2018-25 + 4 series features |
 | `score_model.pkl` | Home score + away score | Regular season games 2017-25 |
+| `goals_model.pkl` | Full score distribution + derived win prob | Regular season games 2017-25 |
 | `playoff_score_model.pkl` | Home score + away score | Playoff games 2018-25 |
 | `player_model.pkl` | Will a player score a point? | Player-game rows 2017-25 |
 | `xg_model.pkl` | Will a shot result in a goal? | All shot events 2017-25 |
@@ -157,6 +160,7 @@ PYTHONPATH=. python3 -m scripts.backtest.run
 
 # Options
 PYTHONPATH=. python3 -m scripts.backtest.run --model gradient_boosting
+PYTHONPATH=. python3 -m scripts.backtest.run --model goals
 PYTHONPATH=. python3 -m scripts.backtest.run --model logistic --no-calibrate
 PYTHONPATH=. python3 -m scripts.backtest.run --exclude-seasons 20202021
 PYTHONPATH=. python3 -m scripts.backtest.run --min-train-seasons 3
@@ -222,6 +226,7 @@ PYTHONPATH=. python3 -m scripts.train.win
 PYTHONPATH=. python3 -m scripts.train.playoff
 
 # Score prediction
+PYTHONPATH=. python3 -m scripts.train.goals
 PYTHONPATH=. python3 -m scripts.train.scores
 PYTHONPATH=. python3 -m scripts.train.playoff_scores
 
@@ -240,3 +245,19 @@ Per-game goalie advanced metrics (including GSAx) are populated into
 Feature builders in this repo read those tables directly. Keep
 `scripts.train.xg` up to date here because ingest uses its copy of
 `xg_model.pkl` to produce `xGF` / `xGA` values during ingest.
+
+---
+
+## Goals-based model (Phase 2.1)
+
+Phase 2.1 introduces an additive goals-based probabilistic path (part 1 of 2):
+- `models/goals.py` fits two Poisson regressions for home/away goal rates and a shared non-negative covariance term (`lambda3`) for a bivariate Poisson score distribution.
+- `scripts/train/goals.py` trains and saves `goals_model.pkl` using the same leak-safe feature set (`FEATURE_COLS`) via `features.training.build_features(use_materialized=True)`.
+- `scripts/backtest/run.py --model goals` runs walk-forward folds and compares derived home-win probability from the goals model vs the win model, while also reporting score-distribution metrics (RPS and exact-scoreline hit rate).
+
+Commands:
+
+```bash
+PYTHONPATH=. python3 -m scripts.train.goals
+PYTHONPATH=. python3 -m scripts.backtest.run --model goals
+```

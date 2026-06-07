@@ -157,3 +157,37 @@ def _get_importances(model):
             )
             return np.mean(imps, axis=0), label
     return None, None
+
+
+def ranked_probability_score(score_probs: np.ndarray, home_score: int, away_score: int) -> float:
+    """
+    Ranked Probability Score on goal-differential outcomes induced by score_probs.
+    Lower is better.
+    """
+    max_goals = score_probs.shape[0] - 1
+    diffs = np.arange(-max_goals, max_goals + 1)
+    diff_probs = np.zeros_like(diffs, dtype=float)
+
+    for i in range(max_goals + 1):
+        for j in range(max_goals + 1):
+            diff_probs[(i - j) + max_goals] += score_probs[i, j]
+
+    diff_probs = diff_probs / max(diff_probs.sum(), 1e-12)
+    obs = np.zeros_like(diff_probs, dtype=float)
+    actual_diff = int(np.clip(int(home_score) - int(away_score), -max_goals, max_goals))
+    obs[actual_diff + max_goals] = 1.0
+
+    cdf_pred = np.cumsum(diff_probs)
+    cdf_obs = np.cumsum(obs)
+    return float(np.sum((cdf_pred - cdf_obs) ** 2) / (len(diff_probs) - 1))
+
+
+def exact_scoreline_hit(score_probs: np.ndarray, home_score: int, away_score: int) -> float:
+    """1.0 if argmax(score_probs) equals the observed scoreline, else 0.0."""
+    max_goals = score_probs.shape[0] - 1
+    home_score = int(home_score)
+    away_score = int(away_score)
+    if home_score > max_goals or away_score > max_goals:
+        return 0.0
+    pred = np.unravel_index(int(np.argmax(score_probs)), score_probs.shape)
+    return 1.0 if pred == (home_score, away_score) else 0.0
