@@ -86,6 +86,27 @@ def resolve_team_display(team_id, client=supabase):
     return f"Team {team_id}", str(team_id)
 
 
+def get_goalie_name(goalie_id, client=supabase):
+    """Fetch goalie name from Supabase by person_id."""
+    if goalie_id is None:
+        return "Auto (TBD)"
+    
+    try:
+        result = client.table("people").select("*").eq("id", goalie_id).limit(1).execute()
+        rows = getattr(result, "data", None) or []
+        if rows:
+            row = rows[0]
+            first_name = row.get("first_name") or ""
+            last_name = row.get("last_name") or ""
+            name = f"{first_name} {last_name}".strip()
+            if name:
+                return name
+    except Exception:
+        pass
+    
+    return f"ID: {goalie_id}"
+
+
 def load_score_model(path="score_model.pkl"):
     """Load the trained score regressors from disk."""
     try:
@@ -154,6 +175,14 @@ def get_prediction_inputs(game_id=None):
     away_name, away_abbr = resolve_team_display(away_team_id)
     home_goalie_id = get_optional_goalie_id("home", retry_on_invalid=False)
     away_goalie_id = get_optional_goalie_id("away", retry_on_invalid=False)
+    
+    # Display goalie names after input
+    home_goalie_name = get_goalie_name(home_goalie_id)
+    away_goalie_name = get_goalie_name(away_goalie_id)
+    if home_goalie_id:
+        print(f"  Home goalie: {home_goalie_name}")
+    if away_goalie_id:
+        print(f"  Away goalie: {away_goalie_name}")
 
     return {
         "game_id": int(game["id"]),
