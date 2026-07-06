@@ -18,11 +18,14 @@ def pick_team(label):
         print(f"  '{abbr}' not found. Try again.")
 
 
-def get_optional_goalie_id(label, retry_on_invalid=True):
+def get_optional_goalie_id(label, team_abbr=None, retry_on_invalid=True):
     """Ask for an optional starting goalie player id."""
+    team_label = f"{label} team"
+    if team_abbr:
+        team_label = f"{team_label} ({team_abbr})"
     while True:
         raw = input(
-            f"\nEnter {label} team starting goalie id [optional, Enter=auto]: "
+            f"\nEnter {team_label} starting goalie id [optional, Enter=auto]: "
         ).strip()
         if raw == "":
             return None

@@ -149,6 +149,7 @@ def test_game_id_not_found_exits_cleanly(monkeypatch, capsys):
 
 def test_game_id_goalie_prompt_valid_blank_and_invalid(monkeypatch, capsys):
     captured = {}
+    prompts = []
 
     _patch_prediction_dependencies(monkeypatch)
     monkeypatch.setattr(
@@ -194,7 +195,14 @@ def test_game_id_goalie_prompt_valid_blank_and_invalid(monkeypatch, capsys):
     for raw_value, expected_value in [("77", 77), ("", None), ("oops", None)]:
         captured.clear()
         inputs = iter([raw_value, ""])
-        monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
+
+        prompts.clear()
+
+        def fake_input(prompt=""):
+            prompts.append(prompt)
+            return next(inputs)
+
+        monkeypatch.setattr("builtins.input", fake_input)
 
         exit_code = predict_run.predict(["--game-id", "13"])
 
@@ -203,6 +211,8 @@ def test_game_id_goalie_prompt_valid_blank_and_invalid(monkeypatch, capsys):
             "home_goalie_id": expected_value,
             "away_goalie_id": None,
         }
+        assert prompts[0] == "\nEnter home team (CAR) starting goalie id [optional, Enter=auto]: "
+        assert prompts[1] == "\nEnter away team (VGK) starting goalie id [optional, Enter=auto]: "
 
     output = capsys.readouterr().out
     assert "falling back to auto inference" in output

@@ -85,14 +85,13 @@ def resolve_team_display(team_id, client=supabase):
 
     return f"Team {team_id}", str(team_id)
 
-
 def get_goalie_name(goalie_id, client=supabase):
-    """Fetch goalie name from Supabase by person_id."""
+    """Fetch goalie name from players table by player_id."""
     if goalie_id is None:
         return "Auto (TBD)"
     
     try:
-        result = client.table("people").select("*").eq("id", goalie_id).limit(1).execute()
+        result = client.table("players").select("first_name, last_name").eq("id", goalie_id).limit(1).execute()
         rows = getattr(result, "data", None) or []
         if rows:
             row = rows[0]
@@ -105,7 +104,6 @@ def get_goalie_name(goalie_id, client=supabase):
         pass
     
     return f"ID: {goalie_id}"
-
 
 def load_score_model(path="score_model.pkl"):
     """Load the trained score regressors from disk."""
@@ -140,9 +138,9 @@ def load_playoff_model(path="playoff_model.pkl"):
 def get_prediction_inputs(game_id=None):
     if game_id is None:
         home_id, home_name, home_abbr = pick_team("home")
-        home_goalie_id = get_optional_goalie_id("home")
+        home_goalie_id = get_optional_goalie_id("home", home_abbr)
         away_id, away_name, away_abbr = pick_team("away")
-        away_goalie_id = get_optional_goalie_id("away")
+        away_goalie_id = get_optional_goalie_id("away", away_abbr)
         game_date = get_game_date()
         game_type_label, is_playoff = get_game_type()
         return {
@@ -173,8 +171,8 @@ def get_prediction_inputs(game_id=None):
     game_date = parse_game_date(game["date"])
     home_name, home_abbr = resolve_team_display(home_team_id)
     away_name, away_abbr = resolve_team_display(away_team_id)
-    home_goalie_id = get_optional_goalie_id("home", retry_on_invalid=False)
-    away_goalie_id = get_optional_goalie_id("away", retry_on_invalid=False)
+    home_goalie_id = get_optional_goalie_id("home", home_abbr, retry_on_invalid=False)
+    away_goalie_id = get_optional_goalie_id("away", away_abbr, retry_on_invalid=False)
     
     # Display goalie names after input
     home_goalie_name = get_goalie_name(home_goalie_id)
@@ -227,7 +225,7 @@ def print_prediction_summary(
     print(f"  Predicted winner: {winner}")
     if threshold != 0.5:
         print(f"  (home picked when home win% > {threshold * 100:.0f}% — "
-              f"threshold tuned to correct playoff home-ice bias)")
+            f"threshold tuned to correct playoff home-ice bias)")
     print(f"\n  Predicted score: {home_abbr} {home_gf:.1f} - {away_gf:.1f} {away_abbr}")
     print(f"  Rounded:         {home_abbr} {round(home_gf)} - {round(away_gf)} {away_abbr}")
     print(f"{'=' * 50}")
