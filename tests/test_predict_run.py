@@ -92,7 +92,7 @@ def test_game_id_flow_maps_db_game_row_into_prediction_inputs(monkeypatch):
     monkeypatch.setattr(
         predict_run,
         "build_prediction_row",
-        lambda home_team_id, away_team_id, game_date, is_playoff, home_goalie_id=None, away_goalie_id=None: (
+        lambda home_team_id, away_team_id, game_date, is_playoff, home_goalie_id=None, away_goalie_id=None, ctx=None: (
             captured.update(
                 {
                     "home_team_id": home_team_id,
@@ -166,7 +166,7 @@ def test_game_id_goalie_prompt_valid_blank_and_invalid(monkeypatch, capsys):
     monkeypatch.setattr(
         predict_run,
         "build_prediction_row",
-        lambda home_team_id, away_team_id, game_date, is_playoff, home_goalie_id=None, away_goalie_id=None: (
+        lambda home_team_id, away_team_id, game_date, is_playoff, home_goalie_id=None, away_goalie_id=None, ctx=None: (
             captured.update(
                 {
                     "home_goalie_id": home_goalie_id,

@@ -43,6 +43,7 @@ import numpy as np
 import pandas as pd
 
 from features.elo import STARTING_ELO, K, HOME_ADV
+from features.games import OFFSEASON_REST_CUTOFF
 from features.strength import (
     build_strength_state,
     goalie_strength_as_of,
@@ -203,17 +204,20 @@ def _resolve_goalie_override(
     goalie_id: int | None,
     label: str,
 ) -> int | None:
-    """Validate optional goalie override against team context before as_of_date."""
+    """Validate optional goalie override: the goalie needs prior starts before as_of_date.
+
+    Starts for any team count (the sv% feature follows the player, not the team),
+    so offseason signings and trades can be picked on their new team.
+    """
     if goalie_id is None:
         return None
-    team_rows = goalie_df[
-        (goalie_df["team_id"] == team_id)
-        & (goalie_df["player_id"] == goalie_id)
+    prior = goalie_df[
+        (goalie_df["player_id"] == goalie_id)
         & (goalie_df["date"] < as_of_date)
     ]
-    if team_rows.empty:
+    if prior.empty:
         print(
-            f"Warning: {label} goalie override {goalie_id} not found for team {team_id} "
+            f"Warning: {label} goalie override {goalie_id} has no starts "
             "before game date; falling back to auto inference."
         )
         return None
@@ -404,7 +408,13 @@ def _rest_days_as_of(
     team_id: int,
     as_of_date: datetime.date,
 ):
-    """Days of rest a team has before as_of_date (None if no prior game found)."""
+    """Days of rest a team has before as_of_date.
+
+    None if no prior game is found, or if the gap is longer than
+    OFFSEASON_REST_CUTOFF days (an offseason break, which training never sees:
+    season openers are dropped for lack of same-season standings). None becomes
+    the neutral rest fill instead of an extreme out-of-range value.
+    """
     prior = games_df[
         (
             (games_df["home_team_id"] == team_id)
@@ -419,7 +429,8 @@ def _rest_days_as_of(
     last_date = _as_date(prior.iloc[-1]["date"])
     if isinstance(as_of_date, str):
         as_of_date = datetime.date.fromisoformat(as_of_date)
-    return (as_of_date - last_date).days
+    rest = (as_of_date - last_date).days
+    return rest if rest <= OFFSEASON_REST_CUTOFF else None
 
 
 def _h2h_as_of(
@@ -500,6 +511,21 @@ def _elo_as_of(
         elo[a_id] = a_elo + K * ((1 - result) - (1 - expected_home))
 
     return elo.get(home_id, STARTING_ELO), elo.get(away_id, STARTING_ELO)
+
+
+def _standings_with_prior_fallback(standings_df, team_id, season, as_of_date):
+    """Serving only: standings before as_of_date, or the prior season's final
+    standings when the team hasn't played in `season` yet (opening days).
+
+    Training never needs this: games without same-season standings are dropped.
+    """
+    std = _standings_as_of(standings_df, team_id, season, as_of_date)
+    if std is not None and std["games_played"] > 0:
+        return std
+    start_year = season // 10000
+    prior_season = (start_year - 1) * 10000 + start_year
+    prior = _standings_as_of(standings_df, team_id, prior_season, as_of_date)
+    return std if prior is None else prior
 
 
 def _standings_as_of(standings_df, team_id, season, as_of_date):
@@ -775,8 +801,8 @@ def build_feature_row(
         y = as_of_date.year
         season = int(f"{y}{y + 1}") if as_of_date.month >= 10 else int(f"{y - 1}{y}")
 
-    home_std = _standings_as_of(ctx.standings, home_team_id, season, as_of_date)
-    away_std = _standings_as_of(ctx.standings, away_team_id, season, as_of_date)
+    home_std = _standings_with_prior_fallback(ctx.standings, home_team_id, season, as_of_date)
+    away_std = _standings_with_prior_fallback(ctx.standings, away_team_id, season, as_of_date)
     if home_std is None or away_std is None:
         return None
     if home_std["games_played"] == 0 and away_std["games_played"] == 0:

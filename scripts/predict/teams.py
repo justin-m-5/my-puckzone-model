@@ -29,7 +29,7 @@ TEAMS = {
     "STL": (19, "St. Louis Blues"),
     "TBL": (14, "Tampa Bay Lightning"),
     "TOR": (10, "Toronto Maple Leafs"),
-    "UTA": (59, "Utah Hockey Club"),
+    "UTA": (68, "Utah Mammoth"),
     "VAN": (23, "Vancouver Canucks"),
     "VGK": (54, "Vegas Golden Knights"),
     "WSH": (15, "Washington Capitals"),

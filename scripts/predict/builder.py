@@ -32,6 +32,7 @@ def build_prediction_row(
     use_materialized=False,
     home_goalie_id=None,
     away_goalie_id=None,
+    ctx=None,
 ):
     """
     Pull live feature data from Supabase for the given matchup and return
@@ -46,18 +47,22 @@ def build_prediction_row(
     use_materialized : bool
         Reserved fast-path flag for future snapshot-based serving. Default False
         keeps current live behavior.
+    ctx : DataContext | None
+        Pre-loaded data (e.g. shared across a whole slate). Loaded from
+        Supabase when None.
 
     Returns
     -------
     (row, debug)  where ``row`` is ready for fill_features + model.predict_proba,
                   and ``debug`` is a dict with human-readable display values.
     """
-    print("\nFetching data from Supabase...")
     if use_materialized:
         # TODO(phase-2.0): optional serving fast path can read team/goalie form
         # snapshots here when explicitly enabled.
         pass
-    ctx = DataContext.from_supabase()
+    if ctx is None:
+        print("\nFetching data from Supabase...")
+        ctx = DataContext.from_supabase()
 
     season_year = game_date.year if game_date.month >= 10 else game_date.year - 1
     season = int(f"{season_year}{season_year + 1}")

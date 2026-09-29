@@ -77,7 +77,7 @@ def resolve_team_display(team_id, client=supabase):
         if rows:
             row = rows[0]
             name = row.get("name") or row.get("team_name") or row.get("full_name")
-            abbr = row.get("abbreviation") or row.get("abbr") or row.get("tri_code") or row.get("code")
+            abbr = row.get("abbrev") or row.get("abbreviation") or row.get("abbr") or row.get("tri_code") or row.get("code")
             if name and abbr:
                 return name, abbr
     except Exception:
@@ -311,23 +311,9 @@ def persist_prediction(prediction_inputs, result):
     write_game_prediction(record)
 
 
-def predict(argv=None):
-    args = parse_args(argv)
-    print("=" * 50)
-    print("  NHL Game Predictor — Puck Zone Model")
-    print("=" * 50)
-
-    # --- user input ---
-    try:
-        prediction_inputs = get_prediction_inputs(game_id=args.game_id)
-    except Exception as exc:
-        print(f"\nERROR: Unable to load game context: {exc}")
-        return 1
-    if prediction_inputs is None:
-        return 1
-
-    # --- load models ---
-    if prediction_inputs["is_playoff"]:
+def load_payloads(is_playoff):
+    """Load the win model payload and matching score model for a game type."""
+    if is_playoff:
         playoff_payload = load_playoff_model()
         if playoff_payload is not None:
             payload = playoff_payload
@@ -338,6 +324,13 @@ def predict(argv=None):
     else:
         payload = load_model()
 
+    # Load appropriate score model for the game type
+    score_payload = load_score_model("playoff_score_model.pkl" if is_playoff else "score_model.pkl")
+    return payload, score_payload
+
+
+def compute_prediction(prediction_inputs, payload, score_payload, ctx=None):
+    """Build features and run the models for one game. Returns (result, debug)."""
     model = payload["model"]
     scaler = payload["scaler"]
     feature_cols = payload["feature_cols"]
@@ -345,9 +338,6 @@ def predict(argv=None):
     # Tuned decision threshold (set by scripts/train/playoff.py). Defaults to 0.5
     # for any model that doesn't carry one.
     threshold = payload.get("decision_threshold", 0.5)
-
-    # Load appropriate score model for the game type
-    score_payload = load_score_model("playoff_score_model.pkl" if prediction_inputs["is_playoff"] else "score_model.pkl")
 
     # --- build features ---
     row, debug = build_prediction_row(
@@ -357,6 +347,7 @@ def predict(argv=None):
         prediction_inputs["is_playoff"],
         home_goalie_id=prediction_inputs["home_goalie_id"],
         away_goalie_id=prediction_inputs["away_goalie_id"],
+        ctx=ctx,
     )
 
     X = fill_features(pd.DataFrame([row])[feature_cols])
@@ -402,17 +393,37 @@ def predict(argv=None):
             "decision_threshold": threshold,
         },
     }
+    return result, debug
+
+
+def predict(argv=None):
+    args = parse_args(argv)
+    print("=" * 50)
+    print("  NHL Game Predictor — Puck Zone Model")
+    print("=" * 50)
+
+    # --- user input ---
+    try:
+        prediction_inputs = get_prediction_inputs(game_id=args.game_id)
+    except Exception as exc:
+        print(f"\nERROR: Unable to load game context: {exc}")
+        return 1
+    if prediction_inputs is None:
+        return 1
+
+    payload, score_payload = load_payloads(prediction_inputs["is_playoff"])
+    result, debug = compute_prediction(prediction_inputs, payload, score_payload)
 
     print_prediction_summary(
         prediction_inputs,
-        home_prob=home_prob,
-        away_prob=away_prob,
-        home_gf=home_gf,
-        away_gf=away_gf,
-        threshold=threshold,
-        winner=winner,
+        home_prob=result["home_prob"],
+        away_prob=result["away_prob"],
+        home_gf=result["home_gf"],
+        away_gf=result["away_gf"],
+        threshold=result["threshold"],
+        winner=result["winner"],
         debug=debug,
-        model_name=model_name,
+        model_name=result["model_name"],
     )
 
     try:

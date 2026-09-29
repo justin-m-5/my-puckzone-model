@@ -3,6 +3,10 @@
 import pandas as pd
 from db import supabase, fetch_all
 
+# Longest in-season break is ~3 weeks (Olympics); a longer gap is an offseason
+# (or the 2020 pause) and is treated as unknown rest -> neutral fill.
+OFFSEASON_REST_CUTOFF = 30
+
 
 def get_games():
     query = supabase.table("games").select("id, season, date, home_team_id, away_team_id, home_score, away_score").eq("game_type", 2).in_("game_state", ["OFF", "FINAL"])
@@ -33,10 +37,12 @@ def build_rest_days_lookup(games_df):
 
     all_games["prev_date"] = all_games.groupby("team_id")["date"].shift(1)
     all_games["rest_days"] = (pd.to_datetime(all_games["date"]) - pd.to_datetime(all_games["prev_date"])).dt.days
+    all_games.loc[all_games["rest_days"] > OFFSEASON_REST_CUTOFF, "rest_days"] = float("nan")
 
     lookup = {}
     for _, row in all_games.iterrows():
-        lookup[(row["id"], row["team_id"])] = row["rest_days"]
+        # None (not NaN) so rest_advantage's `rest or 2` fallback matches serving.
+        lookup[(row["id"], row["team_id"])] = None if pd.isna(row["rest_days"]) else row["rest_days"]
     return lookup
 
 def build_h2h_lookup(games_df):

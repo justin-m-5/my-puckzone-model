@@ -50,14 +50,14 @@ _TOLERANCE = 1e-9   # floating-point tolerance for exact-parity assertions
 
 
 def _approx_eq(a, b, tol=_TOLERANCE):
-    """True if both are None, both are NaN, or |a-b| <= tol."""
-    if a is None and b is None:
+    """True if both are missing (None or NaN, which fill identically), or |a-b| <= tol."""
+    def _missing(v):
+        return v is None or (isinstance(v, float) and math.isnan(v))
+
+    if _missing(a) and _missing(b):
         return True
-    if a is None or b is None:
+    if _missing(a) or _missing(b):
         return False
-    if isinstance(a, float) and isinstance(b, float):
-        if math.isnan(a) and math.isnan(b):
-            return True
     return abs(float(a) - float(b)) <= tol
 
 
