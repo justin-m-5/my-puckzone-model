@@ -39,8 +39,8 @@ from features.training import build_playoff_features
 from models import fill_features
 from models.playoff import PLAYOFF_FEATURE_COLS, get_playoff_model
 
-# Last COMPLETE postseason. Do NOT use 20252026 while those playoffs are live.
-TEST_SEASON = 20242025
+# Last COMPLETE postseason. Do NOT use 20262027 while those playoffs are live.
+TEST_SEASON = 20252026
 
 # "sigmoid" (Platt) is right for this small dataset; "isotonic" overfits here;
 # None disables calibration.

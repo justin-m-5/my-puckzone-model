@@ -184,6 +184,17 @@ For a full status check of all artifacts:
 PYTHONPATH=. python3 -m scripts.validate.artifacts
 ```
 
+### Sync artifacts with Supabase Storage
+
+`.pkl` files are gitignored (this repo is public). The required artifacts live in
+a private `models` Supabase Storage bucket so scheduled jobs can fetch them.
+Push after every retrain:
+
+```bash
+PYTHONPATH=. python3 -m scripts.artifacts.sync push   # local -> Storage
+PYTHONPATH=. python3 -m scripts.artifacts.sync pull   # Storage -> local
+```
+
 ### Archive convention
 
 Place superseded or retired `.pkl` files under `artifacts/archive/`.
