@@ -42,7 +42,7 @@ def test_train_goals_payload_includes_scaler_and_metadata(monkeypatch, tmp_path)
     monkeypatch.setattr(train_goals, "fetch_all", lambda _table, _query: score_rows)
     monkeypatch.setattr(train_goals, "supabase", _DummySupabase())
 
-    train_goals.train()
+    train_goals.train(["--holdout-season", "20252026", "--out", "."])
 
     payload = pickle.load(open(tmp_path / "goals_model.pkl", "rb"))
     assert payload["feature_cols"] == FEATURE_COLS
@@ -52,6 +52,10 @@ def test_train_goals_payload_includes_scaler_and_metadata(monkeypatch, tmp_path)
     assert payload["payload_version"] == "2.4.1"
     assert payload["tie_rule"] is not None
     assert float(payload["lambda3"]) >= 0.0
+    # Final model is refit on every season, holdout included.
+    assert payload["training"]["holdout_season"] == 20252026
+    assert payload["training"]["seasons"] == [20242025, 20252026]
+    assert payload["training"]["n_rows"] == n_rows
 
 
 def test_generate_serving_rows_compatible_with_and_without_scaler(monkeypatch):

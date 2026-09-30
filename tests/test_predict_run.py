@@ -15,12 +15,9 @@ class FakeWinModel:
         return np.array([[0.42, 0.58]])
 
 
-class FakeScoreModel:
-    def __init__(self, value):
-        self.value = value
-
-    def predict(self, X):
-        return np.array([self.value])
+class FakeGoalsModel:
+    def predict_rates(self, X):
+        return np.array([3.2]), np.array([2.4]), np.array([0.0])
 
 
 def _raise_db_write_error(record):
@@ -42,12 +39,12 @@ def _patch_prediction_dependencies(monkeypatch):
     monkeypatch.setattr(predict_run, "load_playoff_model", lambda path="playoff_model.pkl": None)
     monkeypatch.setattr(
         predict_run,
-        "load_score_model",
-        lambda path="score_model.pkl": {
-            "home_model": FakeScoreModel(3.2),
-            "away_model": FakeScoreModel(2.4),
+        "load_goals_model",
+        lambda path="goals_model.pkl": {
+            "model": FakeGoalsModel(),
+            "scaler": None,
             "feature_cols": ["feature"],
-            "model_name": "score-model-test",
+            "model_name": "goals-model-test",
         },
     )
     monkeypatch.setattr(predict_run, "fill_features", lambda df: df)

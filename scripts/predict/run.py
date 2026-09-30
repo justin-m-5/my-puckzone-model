@@ -17,6 +17,7 @@ import sys
 import pandas as pd
 from db import supabase
 from models import fill_features
+from models.goals import expected_away_goals, expected_home_goals, score_matrix
 from scripts.predict.inputs import (
     pick_team,
     get_optional_goalie_id,
@@ -105,13 +106,15 @@ def get_goalie_name(goalie_id, client=supabase):
     
     return f"ID: {goalie_id}"
 
-def load_score_model(path="score_model.pkl"):
-    """Load the trained score regressors from disk."""
+def load_goals_model(path="goals_model.pkl"):
+    """Load the goals model, the source of predicted scores. Required."""
     try:
         with open(path, "rb") as f:
             return pickle.load(f)
     except FileNotFoundError:
-        return None
+        print(f"\nERROR: '{path}' not found (predicted scores come from the goals model).")
+        print("Pull it with 'PYTHONPATH=. python3 -m scripts.artifacts.sync pull', or train and promote it.")
+        exit(1)
 
 
 def load_model(path="win_model.pkl"):
@@ -324,12 +327,20 @@ def load_payloads(is_playoff):
     else:
         payload = load_model()
 
-    # Load appropriate score model for the game type
-    score_payload = load_score_model("playoff_score_model.pkl" if is_playoff else "score_model.pkl")
-    return payload, score_payload
+    return payload, load_goals_model()
 
 
-def compute_prediction(prediction_inputs, payload, score_payload, ctx=None):
+def expected_goals(goals_payload, row):
+    """Expected (home, away) goals from the bivariate Poisson goals model."""
+    X = fill_features(pd.DataFrame([row])[goals_payload["feature_cols"]])
+    if goals_payload.get("scaler") is not None:
+        X = goals_payload["scaler"].transform(X)
+    home_rate, away_rate, lambda3 = goals_payload["model"].predict_rates(X)
+    matrix = score_matrix(float(home_rate[0]), float(away_rate[0]), float(lambda3[0]), max_goals=10)
+    return expected_home_goals(matrix), expected_away_goals(matrix)
+
+
+def compute_prediction(prediction_inputs, payload, goals_payload, ctx=None):
     """Build features and run the models for one game. Returns (result, debug)."""
     model = payload["model"]
     scaler = payload["scaler"]
@@ -360,14 +371,9 @@ def compute_prediction(prediction_inputs, payload, score_payload, ctx=None):
     winner = prediction_inputs["home_name"] if home_prob > threshold else prediction_inputs["away_name"]
     winner_team_id = prediction_inputs["home_team_id"] if home_prob > threshold else prediction_inputs["away_team_id"]
 
-    # score estimate: use trained score model if available, else fall back to goals/game
-    if score_payload is not None:
-        X_score = fill_features(pd.DataFrame([row])[score_payload["feature_cols"]])
-        home_gf = score_payload["home_model"].predict(X_score)[0]
-        away_gf = score_payload["away_model"].predict(X_score)[0]
-    else:
-        home_gf = debug["home_gf_pg"]
-        away_gf = debug["away_gf_pg"]
+    # Predicted score from the goals model (same feature row as the win model).
+    home_gf, away_gf = expected_goals(goals_payload, row)
+    goals_name = goals_payload.get("model_name", "goals_model")
 
     result = {
         "home_prob": home_prob,
@@ -378,18 +384,12 @@ def compute_prediction(prediction_inputs, payload, score_payload, ctx=None):
         "winner_team_id": winner_team_id,
         "threshold": threshold,
         "model_name": model_name,
-        "score_model_name": (
-            score_payload.get("model_name", "score_model")
-            if score_payload is not None
-            else "debug_fallback"
-        ),
+        "score_model_name": goals_name,
         "model_versions": {
             "win_model": model_name,
-            "score_model": (
-                score_payload.get("model_name", "score_model")
-                if score_payload is not None
-                else "debug_fallback"
-            ),
+            "win_model_trained_through": payload.get("training", {}).get("trained_through"),
+            "score_model": goals_name,
+            "score_model_trained_through": goals_payload.get("training", {}).get("trained_through"),
             "decision_threshold": threshold,
         },
     }
@@ -411,8 +411,8 @@ def predict(argv=None):
     if prediction_inputs is None:
         return 1
 
-    payload, score_payload = load_payloads(prediction_inputs["is_playoff"])
-    result, debug = compute_prediction(prediction_inputs, payload, score_payload)
+    payload, goals_payload = load_payloads(prediction_inputs["is_playoff"])
+    result, debug = compute_prediction(prediction_inputs, payload, goals_payload)
 
     print_prediction_summary(
         prediction_inputs,
