@@ -203,40 +203,32 @@ version control via `.gitignore` — only the training scripts are committed.
 
 ---
 
-## Current daily ops (recommended, v3.0)
+## Retraining (weekly candidates, manual promotion)
 
-Issue #6 roadmap status: **Phases 2.0–3.1 completed (June 7, 2026)**.
-
-Use this as the canonical daily sequence:
+Training scores each model on the most recent complete season (held out), then
+**refits on all seasons** so the live model includes the latest season. New
+models are written to `candidates/`, never straight to the live files.
 
 ```bash
-# 0) Optional: verify required artifacts are present before starting
-PYTHONPATH=. python3 -m scripts.validate.artifacts
+# One-off (or let the weekly laptop job do it — see below)
+PYTHONPATH=. python3 -m scripts.materialize.run      # refresh model_game_features
+PYTHONPATH=. python3 -m scripts.train.win            # -> candidates/win_model.pkl
+PYTHONPATH=. python3 -m scripts.train.goals          # -> candidates/goals_model.pkl
+PYTHONPATH=. python3 -m scripts.artifacts.report     # live vs candidate on the holdout season
 
-# 1) Refresh materialized features (safe preview first)
-PYTHONPATH=. python3 -m scripts.materialize.run --dry-run
-PYTHONPATH=. python3 -m scripts.materialize.run
-
-# 2) Retrain core v2 models
-PYTHONPATH=. python3 -m scripts.train.xg
-PYTHONPATH=. python3 -m scripts.train.win
-PYTHONPATH=. python3 -m scripts.train.goals
-
-# 3) Generate predictions (recommended orchestrator path)
-PYTHONPATH=. python3 -m scripts.serve.run --date 2026-06-07 --dry-run
-PYTHONPATH=. python3 -m scripts.serve.run --date 2026-06-07
-
-# Fallback interactive predictor (still supported)
-PYTHONPATH=. python3 -m scripts.predict.run
+# After reviewing the report:
+PYTHONPATH=. python3 -m scripts.artifacts.promote    # archive live, swap in, push to Storage
+PYTHONPATH=. python3 -m scripts.artifacts.promote --rollback artifacts/archive/<timestamp>
 ```
 
-Quick runbook:
-1. Pull latest `main`
-2. Refresh env/secrets
-3. Materialize `--dry-run`, then real write
-4. Retrain (`xg`, `win`, `goals`)
-5. Run `scripts.serve.run` (or `scripts.predict.run` fallback)
-6. Spot-check output table row counts and latest date
+`win_model.pkl` gives win probabilities; `goals_model.pkl` gives the predicted
+score (and so the puck line / total picks). `xg_model.pkl` is not retrained
+weekly: ingest scores every shot with its own copy, so changing it mid-season
+makes stored xG inconsistent.
+
+**Weekly job (laptop):** `bash ops/launchd.sh install` runs `ops/retrain.sh`
+Mondays at 10:15am: materialize → train both → report, logged to
+`~/Library/Logs/puckzone-retrain.log`. It never promotes.
 
 ## Run a prediction
 
