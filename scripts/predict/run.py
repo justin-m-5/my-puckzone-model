@@ -266,7 +266,7 @@ def print_prediction_summary(
     print(f"\n  Model used: {model_name}")
 
 
-def persist_prediction(prediction_inputs, result):
+def persist_prediction(prediction_inputs, result, market_odds=None):
     if prediction_inputs["game_id"] is None:
         return
 
@@ -311,6 +311,10 @@ def persist_prediction(prediction_inputs, result):
             "score_model_name": result["score_model_name"],
         },
     )
+    if market_odds:
+        # Left out when there are no lines, so a re-run keeps the ones saved earlier.
+        record["market_odds"] = market_odds
+        record["odds_fetched_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
     write_game_prediction(record)
 
 

@@ -20,6 +20,7 @@ import datetime
 
 from db import fetch_all, supabase
 from features.pipeline import DataContext
+from scripts.predict.odds import OddsUnavailable, lines_for_games
 from scripts.predict.run import (
     GAME_SELECT_FIELDS,
     TEAM_BY_ID,
@@ -266,10 +267,19 @@ def slate(argv=None):
         print("Nothing published.")
         return 0
 
+    # One Odds API call for the whole slate; the lines are saved with each
+    # prediction so the app never has to fetch them.
+    lines = {}
+    try:
+        lines, remaining = lines_for_games([inputs for inputs, _, _ in entries])
+        print(f"Odds: lines for {len(lines)}/{len(entries)} game(s) (credits remaining: {remaining})")
+    except OddsUnavailable as exc:
+        print(f"Odds: skipped ({exc}); predictions publish without lines.")
+
     failed = 0
     for inputs, result, _ in entries:
         try:
-            persist_prediction(inputs, result)
+            persist_prediction(inputs, result, lines.get(inputs["game_id"]))
             print(f"  published {inputs['game_id']}")
         except Exception as exc:
             failed += 1
