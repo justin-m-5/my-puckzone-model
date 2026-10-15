@@ -20,6 +20,7 @@ import datetime
 
 from db import fetch_all, supabase
 from features.pipeline import DataContext
+from scripts.predict import players
 from scripts.predict.odds import OddsUnavailable, lines_for_games
 from scripts.predict.run import (
     GAME_SELECT_FIELDS,
@@ -285,6 +286,15 @@ def slate(argv=None):
             failed += 1
             print(f"  FAILED {inputs['game_id']}: {exc}")
     print(f"\nDone — {len(entries) - failed} published, {failed} failed.")
+
+    # Player projections use the goalies and expected goals just published.
+    published = [inputs["game_id"] for inputs, _, _ in entries]
+    try:
+        print("\nProjecting players...")
+        n = players.run(target_date, published, quiet=True)
+        print(f"Players: saved {n} projections.")
+    except Exception as exc:
+        print(f"Players: skipped ({exc}). Re-run: PYTHONPATH=. python3 -m scripts.predict.players")
     return 1 if failed else 0
 
 
