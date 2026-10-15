@@ -208,8 +208,8 @@ def test_game_id_goalie_prompt_valid_blank_and_invalid(monkeypatch, capsys):
             "home_goalie_id": expected_value,
             "away_goalie_id": None,
         }
-        assert prompts[0] == "\nEnter home team (CAR) starting goalie id [optional, Enter=auto]: "
-        assert prompts[1] == "\nEnter away team (VGK) starting goalie id [optional, Enter=auto]: "
+        assert prompts[0] == "\nEnter home team (NJD) starting goalie id [optional, Enter=auto]: "
+        assert prompts[1] == "\nEnter away team (NYI) starting goalie id [optional, Enter=auto]: "
 
     output = capsys.readouterr().out
     assert "falling back to auto inference" in output
